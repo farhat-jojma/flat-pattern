@@ -4,18 +4,23 @@ import ezdxf
 import io
 import math
 import os
+import traceback
 
 # --- Import shapes ---
-from shapes import (
-    generate_cone,
-    generate_frustum_cone,
-    generate_frustum_cone_triangulation,
-    generate_pyramid,
-    generate_rectangle_to_rectangle,
-    generate_flange,
-    generate_truncated_cylinder,
-    generate_bend
-)
+try:
+    from shapes import (
+        generate_cone,
+        generate_frustum_cone,
+        generate_frustum_cone_triangulation,
+        generate_pyramid,
+        generate_rectangle_to_rectangle,
+        generate_flange,
+        generate_truncated_cylinder,
+        generate_bend
+    )
+except Exception as e:
+    print("Error importing shapes:", e)
+    traceback.print_exc()
 
 import sys
 sys.stdout.flush()
