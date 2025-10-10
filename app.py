@@ -22,7 +22,7 @@ CORS(app)
 
 @app.route("/")
 def home():
-    return "✅ Flat Pattern API is running"
+    return jsonify({"status": "ok", "message": "Flat Pattern API running"})
 
 @app.route("/generate_dxf", methods=["POST"])
 def generate_dxf():
