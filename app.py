@@ -6,8 +6,8 @@ app = Flask(__name__)
 CORS(app)
 
 @app.route('/')
-def home():
-    return jsonify({"message": "Backend is running on Railway!"})
+def index():
+    return "Flask app deployed successfully!"
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
