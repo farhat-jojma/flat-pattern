@@ -17,6 +17,9 @@ from shapes import (
     generate_bend
 )
 
+import sys
+sys.stdout.flush()
+
 app = Flask(__name__)
 CORS(app)
 
@@ -144,7 +147,7 @@ def generate_dxf():
         )
 
     except Exception as e:
-        print("Error:", e)
+        print("Error:", e, file=sys.stderr)
         return jsonify({"error": str(e)}), 500
 
 
