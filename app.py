@@ -3,6 +3,7 @@ from flask_cors import CORS
 import ezdxf
 import io
 import math
+import os
 
 # --- Import shapes ---
 from shapes import (
@@ -148,4 +149,5 @@ def generate_dxf():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
