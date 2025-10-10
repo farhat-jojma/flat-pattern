@@ -19,6 +19,9 @@ from shapes import (
 app = Flask(__name__)
 CORS(app)
 
+@app.route("/")
+def home():
+    return "✅ Flat Pattern API is running"
 
 @app.route("/generate_dxf", methods=["POST"])
 def generate_dxf():
