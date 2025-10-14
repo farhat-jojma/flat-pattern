@@ -36,21 +36,61 @@ def generate_cone(diameter, height):
     }
 
 # 2. Frustum Cone
-def generate_frustum_cone(d1, d2, height):
-    r1 = math.sqrt((d1 / 2) ** 2 + height ** 2)
-    r2 = math.sqrt((d2 / 2) ** 2 + height ** 2)
-    arc_length = math.pi * (d1 + d2)
-    angle = 360 * arc_length / (2 * math.pi * r2)
+def generate_frustum_cone(d1, d2, value, mode="H"):
+    import math
 
-    points_outer = []
-    points_inner = []
-    steps = 100
+    D1, D2 = float(d1), float(d2)
+
+    if mode.upper() == "H":
+        H = value
+        R1 = math.sqrt(H**2 + (D1 / 2)**2)
+        R2 = math.sqrt(H**2 + (D2 / 2)**2)
+        beta = 360 * (D1 - D2) / (2 * math.pi * R1)
+    else:
+        beta = float(value)
+        if beta <= 0:
+            raise ValueError("Beta must be > 0°.")
+        beta_max = 360 * (D1 - D2) / (math.pi * D1)
+        if beta > beta_max:
+            beta = beta_max
+
+        R_slant = (D1 - D2) * 180 / (math.pi * beta)
+        R_outer = R_slant * (D1 / (D1 - D2))
+        R_inner = R_slant * (D2 / (D1 - D2))
+        diff = max(R_outer**2 - (D1 / 2)**2, 0)
+        H = math.sqrt(diff)
+        R1, R2 = R_outer, R_inner
+
+    # --- generate arcs with angular offset ---
+    steps = 200
+    outer, inner = [], []
+    start_angle = -beta / 2  # ✅ center the pattern and give inclination
+    end_angle = beta / 2
+
     for i in range(steps + 1):
-        theta = math.radians(i * angle / steps)
-        points_outer.append((r2 * math.cos(theta), r2 * math.sin(theta)))
-        points_inner.append((r1 * math.cos(theta), r1 * math.sin(theta)))
-    return points_outer + list(reversed(points_inner))
+        θ = math.radians(start_angle + i * (beta / steps))
+        outer.append((R1 * math.cos(θ), R1 * math.sin(θ)))
+        inner.append((R2 * math.cos(θ), R2 * math.sin(θ)))
 
+    inner.reverse()
+    pts = outer + inner + [outer[0]]
+
+    # --- computed data ---
+    corde_A = 2 * R1 * math.sin(math.radians(beta / 2))
+    corde_C = 2 * R2 * math.sin(math.radians(beta / 2))
+    L = R1 - R2
+
+    data = {
+        "R1": round(R1, 2),
+        "R2": round(R2, 2),
+        "beta": round(beta, 2),
+        "H": round(H, 2),
+        "corde A": round(corde_A, 2),
+        "corde C": round(corde_C, 2),
+        "L": round(L, 2),
+    }
+
+    return {"points": pts, "data": data}
 
 # 3. Frustum Cone (Triangulation)
 def generate_frustum_cone_triangulation(d1, d2, height, n=24):
@@ -64,7 +104,6 @@ def generate_frustum_cone_triangulation(d1, d2, height, n=24):
         points_top.append((r1 * math.cos(theta), r1 * math.sin(theta)))
         points_bottom.append((r2 * math.cos(theta), r2 * math.sin(theta)))
     return points_top + list(reversed(points_bottom))
-
 
 # 4. Pyramid (sheet metal version, supports K-factor & bend allowance)
 def generate_pyramid(AA, AB, H):

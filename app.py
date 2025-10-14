@@ -66,12 +66,21 @@ def generate_dxf():
             msp.add_lwpolyline(result["points"], close=True)
 
         elif shape == "frustum_cone":
-            pts = generate_frustum_cone(
-                float(params["diameter1"]),
-                float(params["diameter2"]),
-                float(params["height"])
-            )
-            msp.add_lwpolyline(pts, close=True)
+            d1 = float(params["diameter1"])
+            d2 = float(params["diameter2"])
+
+            if "height" in params:
+                value = float(params["height"])
+                mode = "H"
+            elif "beta" in params:
+                value = float(params["beta"])
+                mode = "B"
+            else:
+                return jsonify({"error": "Missing height or beta parameter"}), 400
+
+            result = generate_frustum_cone(d1, d2, value, mode)
+            msp.add_lwpolyline(result["points"], close=True)
+
 
         elif shape == "frustum_cone_triangulation":
             pts = generate_frustum_cone_triangulation(

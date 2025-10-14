@@ -61,14 +61,20 @@
       const resultsDiv = document.getElementById("results");
       const calcList = document.getElementById("calcList");
       const downloadBtn = document.getElementById("downloadBtn");
-
       let lastDXFBase64 = null;
+
+      // Default demo values
+      const defaultValues = {
+        diameter: 200,
+        height: 200,
+        diameter1: 300,
+        diameter2: 150,
+        beta: 120,
+      };
 
       // Shape fields
       const shapeFields = {
         cone: ["diameter", "height"],
-        frustum_cone: ["diameter1", "diameter2", "height"],
-        frustum_cone_triangulation: ["diameter1", "diameter2", "height"],
         pyramid: ["AA", "AB", "H"],
         rectangle_to_rectangle: ["w1", "h1", "w2", "h2", "height"],
         flange: ["outer_d", "inner_d", "holes", "hole_d"],
@@ -77,40 +83,75 @@
         elbow: ["R", "alpha", "D", "N", "n"]
       };
 
-      // Default demo values
-      const defaultValues = {
-        diameter: 200,
-        height: 200,
-        diameter1: 200,
-        diameter2: 400,
-        AA: 200,
-        AB: 200,
-        H: 150,
-        w1: 200,
-        h1: 100,
-        w2: 300,
-        h2: 150,
-        outer_d: 500,
-        inner_d: 300,
-        holes: 8,
-        hole_d: 20,
-        angle: 30,
-        radius: 150,
-        bend_angle: 45,
-        divisions: 200,
-        R: 150,
-        alpha: 90,
-        D: 300,
-        N: 4,
-        n: 36
-      };
-
       // Generate input fields
       shapeSelect.addEventListener("change", () => {
         const shape = shapeSelect.value;
         fieldsDiv.innerHTML = "";
         resultsDiv.classList.add("hidden");
-        if (shape && shapeFields[shape]) {
+
+        // Special behavior for frustum_cone
+        if (shape === "frustum_cone") {
+          // Diameters always required
+          const fields = ["diameter1", "diameter2"];
+          fields.forEach(f => {
+            const label = document.createElement("label");
+            label.className = "block mt-2 font-medium";
+            label.textContent = `${f.replaceAll("_", " ")} (mm)`;
+
+            const input = document.createElement("input");
+            input.type = "number";
+            input.id = f;
+            input.className = "w-full border rounded p-2 mt-1";
+            input.step = "any";
+            if (defaultValues[f] !== undefined) input.value = defaultValues[f];
+            fieldsDiv.appendChild(label);
+            fieldsDiv.appendChild(input);
+          });
+
+          // Radio buttons for mode selection
+          const modeDiv = document.createElement("div");
+          modeDiv.className = "mt-4";
+          modeDiv.innerHTML = `
+            <p class="font-semibold mb-2">Calculation Mode:</p>
+            <label class="mr-4">
+              <input type="radio" name="mode" value="H" checked class="mr-1" /> Height (H)
+            </label>
+            <label>
+              <input type="radio" name="mode" value="B" class="mr-1" /> Beta (β)
+            </label>
+          `;
+          fieldsDiv.appendChild(modeDiv);
+
+          // Input for height or beta
+          const extraDiv = document.createElement("div");
+          extraDiv.id = "extraField";
+          extraDiv.className = "mt-3";
+          extraDiv.innerHTML = `
+            <label class="block font-medium">Height (H mm)</label>
+            <input type="number" id="height" class="w-full border rounded p-2 mt-1" step="any" value="${defaultValues.height}" />
+          `;
+          fieldsDiv.appendChild(extraDiv);
+
+          // Toggle between Height and Beta
+          modeDiv.querySelectorAll("input[name='mode']").forEach(radio => {
+            radio.addEventListener("change", () => {
+              const val = document.querySelector("input[name='mode']:checked").value;
+              if (val === "H") {
+                extraDiv.innerHTML = `
+                  <label class="block font-medium">Height (H mm)</label>
+                  <input type="number" id="height" class="w-full border rounded p-2 mt-1" step="any" value="${defaultValues.height}" />
+                `;
+              } else {
+                extraDiv.innerHTML = `
+                  <label class="block font-medium">Beta (°)</label>
+                  <input type="number" id="beta" class="w-full border rounded p-2 mt-1" step="any" value="${defaultValues.beta}" />
+                `;
+              }
+            });
+          });
+        } 
+        // For all other shapes
+        else if (shape && shapeFields[shape]) {
           shapeFields[shape].forEach(f => {
             const label = document.createElement("label");
             label.className = "block mt-2 font-medium";
@@ -123,7 +164,6 @@
             input.placeholder = f;
             input.step = "any";
             if (defaultValues[f] !== undefined) input.value = defaultValues[f];
-
             fieldsDiv.appendChild(label);
             fieldsDiv.appendChild(input);
           });
@@ -138,13 +178,29 @@
           return;
         }
 
-        // Build params
         const params = {};
-        if (shapeFields[shape]) {
-          shapeFields[shape].forEach(f => {
-            const val = parseFloat(document.getElementById(f).value);
-            if (!isNaN(val)) params[f] = val;
-          });
+
+        if (shape === "frustum_cone") {
+          const d1 = parseFloat(document.getElementById("diameter1").value);
+          const d2 = parseFloat(document.getElementById("diameter2").value);
+          const mode = document.querySelector("input[name='mode']:checked").value;
+
+          params["diameter1"] = d1;
+          params["diameter2"] = d2;
+          params["mode"] = mode;
+
+          if (mode === "H") {
+            params["height"] = parseFloat(document.getElementById("height").value);
+          } else {
+            params["beta"] = parseFloat(document.getElementById("beta").value);
+          }
+        } else {
+          if (shapeFields[shape]) {
+            shapeFields[shape].forEach(f => {
+              const val = parseFloat(document.getElementById(f).value);
+              if (!isNaN(val)) params[f] = val;
+            });
+          }
         }
 
         const payload = { shape, params };
@@ -161,7 +217,6 @@
           });
 
           if (!res.ok) throw new Error("Error generating DXF");
-
           const json = await res.json();
           console.log("✅ Response:", json);
 
@@ -176,10 +231,7 @@
           }
 
           resultsDiv.classList.remove("hidden");
-
-          // Store DXF for later download
           lastDXFBase64 = json.dxf_base64;
-
         } catch (err) {
           alert(err.message);
           console.error(err);
@@ -191,12 +243,9 @@
       // Download DXF
       downloadBtn.addEventListener("click", () => {
         if (!lastDXFBase64) return alert("No DXF available yet!");
-
         const byteChars = atob(lastDXFBase64);
         const byteNumbers = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) {
-          byteNumbers[i] = byteChars.charCodeAt(i);
-        }
+        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
         const byteArray = new Uint8Array(byteNumbers);
         const blob = new Blob([byteArray], { type: "application/dxf" });
         const url = URL.createObjectURL(blob);
