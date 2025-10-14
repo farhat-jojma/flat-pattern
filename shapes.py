@@ -49,44 +49,43 @@ def generate_frustum_cone_triangulation(d1, d2, height, n=24):
 
 
 # 4. Pyramid (sheet metal version, supports K-factor & bend allowance)
-def generate_pyramid(base, height, thickness=2.0, bend_radius=2.0, k_factor=0.33, bend_angle=90, sides=4):
+def generate_pyramid(AA, AB, H):
     """
-    Génère le développé d'une pyramide polygonale (par défaut carrée) avec prise en compte
-    des paramètres de pliage (épaisseur, rayon, K-factor).
-    
-    :param base: longueur du côté de la base (mm)
-    :param height: hauteur verticale (mm)
-    :param thickness: épaisseur matière (mm)
-    :param bend_radius: rayon intérieur du pli (mm)
-    :param k_factor: facteur neutre (0.3 ~ 0.5)
-    :param bend_angle: angle de pliage en degrés (souvent 90°)
-    :param sides: nombre de côtés (par défaut 4 = pyramide carrée)
-    :return: liste de points XY pour DXF
+    Génère le développé d'une pyramide à base rectangulaire.
+    AA = longueur du côté de base (en mm)
+    AB = largeur du côté de base (en mm)
+    H = hauteur verticale (en mm)
+    Retourne une liste de polygones (1 par face).
     """
-    # Apothem de la base (du centre à la moitié d'un côté)
-    apothem = base / (2 * math.tan(math.pi / sides))
+    # Points de la base dans le plan XY
+    base_points = [
+        (0, 0),          # A
+        (AA, 0),         # B
+        (AA, AB),        # B'
+        (0, AB)          # A'
+    ]
 
-    # Slant height (génératrice) depuis le neutre
-    slant_height = math.sqrt(apothem**2 + height**2)
+    # Centre de la base (C)
+    Cx = AA / 2
+    Cy = AB / 2
 
-    # Bend allowance pour un pli
-    bend_allowance = math.radians(bend_angle) * (bend_radius + k_factor * thickness)
+    # Calcul des longueurs inclinées (slant heights)
+    slant1 = math.sqrt((AA / 2) ** 2 + H ** 2)  # côté parallèle à AA
+    slant2 = math.sqrt((AB / 2) ** 2 + H ** 2)  # côté parallèle à AB
 
-    # Longueur développée d'un côté = slant height + bend compensation
-    true_length = slant_height + bend_allowance
+    # Génération des faces (triangles)
+    faces = []
 
-    # Calcul de l'angle central
-    central_angle = 2 * math.pi / sides
+    # Face avant
+    faces.append([(0, 0), (AA, 0), (Cx, -slant1)])
+    # Face droite
+    faces.append([(AA, 0), (AA, AB), (AA + slant2, Cy)])
+    # Face arrière
+    faces.append([(0, AB), (AA, AB), (Cx, AB + slant1)])
+    # Face gauche
+    faces.append([(0, 0), (0, AB), (-slant2, Cy)])
 
-    points = []
-    for i in range(sides + 1):
-        theta = i * central_angle
-        x = true_length * math.cos(theta)
-        y = true_length * math.sin(theta)
-        points.append((x, y))
-
-    return points
-
+    return faces
 # 5. Rectangle to Rectangle
 def generate_rectangle_to_rectangle(w1, h1, w2, h2, height):
     return [
@@ -119,39 +118,54 @@ def generate_truncated_cylinder(diameter, height, angle):
     ]
 
 # 8. Bend
-def generate_bend(diameter, bend_angle, radius, divisions=12):
+def generate_elbow(R, alpha, D, N, n):
     """
-    Génère le développé d'un coude (bend / elbow) par triangulation.
-    :param diameter: diamètre du tube (mm)
-    :param bend_angle: angle du coude (°)
-    :param radius: rayon de cintrage (mm)
-    :param divisions: nombre de génératrices (plus grand = plus précis)
-    :return: liste de listes de points (chaque trapèze est une polyline)
+    Realistic elbow flat pattern:
+    - rectangle of width πD and height D
+    - two identical arcs (not mirrored) offset vertically
+    - geometry based on cylindrical intersection, no crossing
     """
-    r = diameter / 2
-    angle_step = math.radians(bend_angle) / divisions
 
-    # Liste des polylignes (trapèzes juxtaposés)
-    patterns = []
+    # basic parameters
+    alpha_sector = math.radians(alpha / N)
+    piD = math.pi * D
+    step = piD / n
+    H = D
+    center_y = H / 2
 
-    for i in range(divisions):
-        theta1 = i * angle_step
-        theta2 = (i + 1) * angle_step
+    # compute intersection heights (single arc shape)
+    h_vals = []
+    for i in range(n + 1):
+        theta = math.radians(i * 360 / n)
+        h = R * (1 - math.cos(alpha_sector / 2)) + R * math.sin(alpha_sector / 2) * math.sin(theta)
+        h_vals.append(h)
 
-        # Longueur développée pour chaque génératrice
-        arc_length1 = (radius - r) * theta1
-        arc_length2 = (radius + r) * theta1
-        arc_length3 = (radius - r) * theta2
-        arc_length4 = (radius + r) * theta2
+    # normalize so the arc sits roughly mid-height
+    h_min, h_max = min(h_vals), max(h_vals)
+    amplitude = h_max - h_min
+    base = center_y - amplitude / 2
 
-        # Trapèze (points à plat)
-        trapezoid = [
-            (arc_length1, 0),
-            (arc_length2, 0),
-            (arc_length4, r * 2),
-            (arc_length3, r * 2),
-            (arc_length1, 0)
-        ]
-        patterns.append(trapezoid)
+    # distance between upper and lower edges of band
+    gap = amplitude * 1.2  # constant vertical offset; adjust for visual spacing
 
-    return patterns
+    points_top = []
+    points_bottom = []
+
+    for i, h in enumerate(h_vals):
+        x = i * step
+        # both arcs go in the same direction; bottom is just offset downwards
+        y_top = base + h + gap / 2
+        y_bottom = base + h - gap / 2
+        points_top.append((x, y_top))
+        points_bottom.append((x, y_bottom))
+
+    # outer rectangle for reference
+    rect = [(0, 0), (piD, 0), (piD, H), (0, H)]
+
+    return {
+        "A": points_top,
+        "B": points_bottom,
+        "rect": rect,
+        "piD": piD,
+        "step": step,
+    }

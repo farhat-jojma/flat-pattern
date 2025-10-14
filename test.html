@@ -1,158 +1,169 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>DXF Generator Test</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-  <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-lg relative">
-    <h1 class="text-2xl font-bold mb-4 text-center">DXF Generator Test</h1>
+  <head>
+    <meta charset="UTF-8" />
+    <title>DXF Generator Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-lg relative">
+      <h1 class="text-2xl font-bold mb-4 text-center">DXF Generator Test</h1>
 
-    <!-- Shape selection -->
-    <label class="block mb-2 font-semibold">Select Shape:</label>
-    <select id="shape" class="w-full border rounded p-2 mb-4">
-      <option value="">-- Choose a shape --</option>
-      <option value="cone">Cone</option>
-      <option value="frustum_cone">Frustum Cone</option>
-      <option value="frustum_cone_triangulation">Frustum Cone (Triangulation)</option>
-      <option value="pyramid">Pyramid</option>
-      <option value="rectangle_to_rectangle">Rectangle to Rectangle</option>
-      <option value="flange">Flange</option>
-      <option value="truncated_cylinder">Truncated Cylinder</option>
-      <option value="bend">Bend (Elbow)</option>
-    </select>
+      <!-- Shape selection -->
+      <label class="block mb-2 font-semibold">Select Shape:</label>
+      <select id="shape" class="w-full border rounded p-2 mb-4">
+        <option value="">-- Choose a shape --</option>
+        <option value="cone">Cone</option>
+        <option value="frustum_cone">Frustum Cone</option>
+        <option value="frustum_cone_triangulation">Frustum Cone (Triangulation)</option>
+        <option value="pyramid">Pyramid</option>
+        <option value="rectangle_to_rectangle">Rectangle to Rectangle</option>
+        <option value="flange">Flange</option>
+        <option value="truncated_cylinder">Truncated Cylinder</option>
+        <option value="bend">Simple Bend</option>
+        <option value="elbow">Pipe Elbow (Flat Pattern)</option>
+      </select>
 
-    <!-- Dynamic fields -->
-    <div id="fields"></div>
+      <!-- Dynamic input fields -->
+      <div id="fields"></div>
 
-    <!-- Submit -->
-    <button id="generateBtn" onclick="generateDXF()" 
-      class="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
-      Generate DXF
-    </button>
+      <!-- Submit button -->
+      <button id="generateBtn" onclick="generateDXF()" 
+        class="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+        Generate DXF
+      </button>
 
-    <!-- Loading overlay -->
-    <div id="loading" class="hidden absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl">
-      <div class="flex flex-col items-center">
-        <svg class="animate-spin h-8 w-8 text-blue-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l3 3-3 3v-4a8 8 0 01-8-8z"></path>
-        </svg>
-        <p class="text-blue-700 font-semibold">Generating DXF...</p>
+      <!-- Loading overlay -->
+      <div id="loading" class="hidden absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl">
+        <div class="flex flex-col items-center">
+          <svg class="animate-spin h-8 w-8 text-blue-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l3 3-3 3v-4a8 8 0 01-8-8z"></path>
+          </svg>
+          <p class="text-blue-700 font-semibold">Generating DXF...</p>
+        </div>
       </div>
     </div>
-  </div>
 
-  <script>
-    const fieldsDiv = document.getElementById("fields");
-    const shapeSelect = document.getElementById("shape");
-    const loadingOverlay = document.getElementById("loading");
+    <script>
+      const fieldsDiv = document.getElementById("fields");
+      const shapeSelect = document.getElementById("shape");
+      const loadingOverlay = document.getElementById("loading");
 
-    const shapeFields = {
-      cone: ["diameter", "height"],
-      frustum_cone: ["diameter1", "diameter2", "height"],
-      frustum_cone_triangulation: ["diameter1", "diameter2", "height"],
-      pyramid: ["base", "height", "thickness", "bend_radius", "k_factor", "bend_angle", "sides"],
-      rectangle_to_rectangle: ["w1", "h1", "w2", "h2", "height"],
-      flange: ["outer_d", "inner_d", "holes", "hole_d"],
-      truncated_cylinder: ["diameter", "height", "angle"],
-      bend: ["diameter", "bend_angle", "radius", "divisions"]
-    };
+      // Shape fields
+      const shapeFields = {
+        cone: ["diameter", "height"],
+        frustum_cone: ["diameter1", "diameter2", "height"],
+        frustum_cone_triangulation: ["diameter1", "diameter2", "height"],
+        pyramid: ["AA", "AB", "H"],
+        rectangle_to_rectangle: ["w1", "h1", "w2", "h2", "height"],
+        flange: ["outer_d", "inner_d", "holes", "hole_d"],
+        truncated_cylinder: ["diameter", "height", "angle"],
+        bend: ["diameter", "bend_angle", "radius", "divisions"],
 
-    const defaultValues = {
-      base: 200,
-      height: 300,
-      thickness: 3,
-      bend_radius: 5,
-      k_factor: 0.33,
-      bend_angle: 90,
-      sides: 4,
-      diameter: 300,
-      diameter1: 200,
-      diameter2: 400,
-      w1: 200,
-      h1: 100,
-      w2: 300,
-      h2: 150,
-      outer_d: 500,
-      inner_d: 300,
-      holes: 8,
-      hole_d: 20,
-      angle: 30,
-      radius: 150,
-      divisions: 12
-    };
+        // ✅ Correct elbow parameters (same as in Flask)
+        elbow: ["R", "alpha", "D", "N", "n"]
+      };
 
-    shapeSelect.addEventListener("change", () => {
-      const shape = shapeSelect.value;
-      fieldsDiv.innerHTML = "";
-      if (shape && shapeFields[shape]) {
-        shapeFields[shape].forEach(f => {
-          const label = document.createElement("label");
-          label.className = "block mt-2 font-medium";
-          label.textContent = `${f} (mm)`;
+      // Default demo values
+      const defaultValues = {
+        diameter: 200,
+        height: 200,
+        diameter1: 200,
+        diameter2: 400,
+        AA: 200,
+        AB: 200,
+        H: 150,
+        w1: 200,
+        h1: 100,
+        w2: 300,
+        h2: 150,
+        outer_d: 500,
+        inner_d: 300,
+        holes: 8,
+        hole_d: 20,
+        angle: 30,
+        radius: 150,
+        bend_angle: 45,
+        divisions: 200,
+        R: 150,
+        alpha: 90,
+        D: 300,
+        N: 4,
+        n: 36
+      };
 
-          const input = document.createElement("input");
-          input.type = "number";
-          input.id = f;
-          input.className = "w-full border rounded p-2 mt-1";
-          input.placeholder = f;
+      // Generate input fields
+      shapeSelect.addEventListener("change", () => {
+        const shape = shapeSelect.value;
+        fieldsDiv.innerHTML = "";
+        if (shape && shapeFields[shape]) {
+          shapeFields[shape].forEach(f => {
+            const label = document.createElement("label");
+            label.className = "block mt-2 font-medium";
+            label.textContent = `${f.replaceAll("_", " ")} (mm)`;
 
-          if (defaultValues[f] !== undefined) {
-            input.value = defaultValues[f];
-          }
+            const input = document.createElement("input");
+            input.type = "number";
+            input.id = f;
+            input.className = "w-full border rounded p-2 mt-1";
+            input.placeholder = f;
+            input.step = "any";
+            if (defaultValues[f] !== undefined) input.value = defaultValues[f];
 
-          fieldsDiv.appendChild(label);
-          fieldsDiv.appendChild(input);
-        });
-      }
-    });
+            fieldsDiv.appendChild(label);
+            fieldsDiv.appendChild(input);
+          });
+        }
+      });
 
-    async function generateDXF() {
-      const shape = shapeSelect.value;
-      if (!shape) {
-        alert("Please select a shape!");
-        return;
-      }
-
-      const payload = { shape };
-
-      if (shapeFields[shape]) {
-        shapeFields[shape].forEach(f => {
-          const val = document.getElementById(f).value;
-          payload[f] = parseFloat(val);
-        });
-      }
-
-      loadingOverlay.classList.remove("hidden");
-
-      try {
-        const res = await fetch("http://127.0.0.1:5000/generate_dxf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) {
-          throw new Error("Error generating DXF");
+      // Generate DXF file
+      async function generateDXF() {
+        const shape = shapeSelect.value;
+        if (!shape) {
+          alert("Please select a shape!");
+          return;
         }
 
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${shape}.dxf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      } catch (err) {
-        alert(err.message);
-      } finally {
-        loadingOverlay.classList.add("hidden");
+        // Build params
+        const params = {};
+        if (shapeFields[shape]) {
+          shapeFields[shape].forEach(f => {
+            const val = parseFloat(document.getElementById(f).value);
+            if (!isNaN(val)) params[f] = val;
+          });
+        }
+
+        const payload = { shape, params };
+        console.log("🟦 Payload sent:", payload);
+
+        loadingOverlay.classList.remove("hidden");
+
+        try {
+          // Change this URL if your backend is hosted online
+          const res = await fetch("http://127.0.0.1:5000/generate_dxf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) throw new Error("Error generating DXF");
+
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${shape}.dxf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        } catch (err) {
+          alert(err.message);
+        } finally {
+          loadingOverlay.classList.add("hidden");
+        }
       }
-    }
-  </script>
-</body>
+    </script>
+  </body>
 </html>
