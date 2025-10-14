@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, send_file, jsonify, send_from_directory
 from flask_cors import CORS
 import ezdxf
 import io
@@ -33,6 +33,13 @@ CORS(app)
 def home():
     return jsonify({"status": "ok", "message": "Flat Pattern API running"})
 
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(
+        os.path.join(app.root_path, 'static'),
+        "favicon.ico",
+        mimetype='image/vnd.microsoft.icon'
+    )
 
 @app.route("/generate_dxf", methods=["POST"])
 def generate_dxf():
