@@ -37,8 +37,6 @@ def generate_cone(diameter, height):
 
 # 2. Frustum Cone
 def generate_frustum_cone(d1, d2, value, mode="H"):
-    import math
-
     D1, D2 = float(d1), float(d2)
 
     if mode.upper() == "H":
@@ -53,7 +51,6 @@ def generate_frustum_cone(d1, d2, value, mode="H"):
         beta_max = 360 * (D1 - D2) / (math.pi * D1)
         if beta > beta_max:
             beta = beta_max
-
         R_slant = (D1 - D2) * 180 / (math.pi * beta)
         R_outer = R_slant * (D1 / (D1 - D2))
         R_inner = R_slant * (D2 / (D1 - D2))
@@ -61,33 +58,42 @@ def generate_frustum_cone(d1, d2, value, mode="H"):
         H = math.sqrt(diff)
         R1, R2 = R_outer, R_inner
 
-    # --- generate arcs with angular offset ---
+    # --- Arcs inclinés ---
     steps = 200
     outer, inner = [], []
-    start_angle = -beta / 2  # ✅ center the pattern and give inclination
-    end_angle = beta / 2
-
+    start_angle = -beta / 2
     for i in range(steps + 1):
         θ = math.radians(start_angle + i * (beta / steps))
         outer.append((R1 * math.cos(θ), R1 * math.sin(θ)))
         inner.append((R2 * math.cos(θ), R2 * math.sin(θ)))
-
     inner.reverse()
     pts = outer + inner + [outer[0]]
 
-    # --- computed data ---
+    # --- Calculs complémentaires ---
     corde_A = 2 * R1 * math.sin(math.radians(beta / 2))
     corde_C = 2 * R2 * math.sin(math.radians(beta / 2))
-    L = R1 - R2
+    L = R2 - R1
+    pi_D1 = math.pi * D1
+    pi_D2 = math.pi * D2
+
+    # hauteur projetée de chaque rayon sur l’axe du cône
+    h1 = R1 * math.cos(math.radians(beta / 2))
+    h2 = R2 * math.cos(math.radians(beta / 2))
+    B = h2 - h1
 
     data = {
-        "R1": round(R1, 2),
-        "R2": round(R2, 2),
-        "beta": round(beta, 2),
-        "H": round(H, 2),
-        "corde A": round(corde_A, 2),
-        "corde C": round(corde_C, 2),
-        "L": round(L, 2),
+        "Longueur L": round(L, 2),
+        "Rayon R1": round(R1, 2),
+        "Rayon R2": round(R2, 2),
+        "Angle des gabarits α": round(beta, 2),
+        "Angolo di cono β": round(beta, 2),
+        "π·D1": round(pi_D1, 2),
+        "π·D2": round(pi_D2, 2),
+        "h1": round(h1, 2),
+        "h2": round(h2, 2),
+        "B": round(B, 2),
+        "Corde A": round(corde_A, 2),
+        "Corde C": round(corde_C, 2),
     }
 
     return {"points": pts, "data": data}
