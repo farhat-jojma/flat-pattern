@@ -2,20 +2,38 @@ import math
 
 # 1. Cone
 def generate_cone(diameter, height):
-    r = math.sqrt((diameter / 2) ** 2 + height ** 2)
-    arc_length = math.pi * diameter
-    angle = 360 * arc_length / (2 * math.pi * r)
+    """
+    Generates a true flat pattern of a cone and returns both geometry and calculations.
+    """
 
-    points = []
-    steps = 100
+    import math
+
+    D = diameter
+    H = height
+
+    # Calculations
+    R = math.sqrt((D / 2) ** 2 + H ** 2)
+    beta = 180 * (D / R)  # in degrees
+    A = 2 * R * math.sin(math.radians(beta / 2))
+
+    # Generate arc points (sector)
+    steps = 120
+    pts = [(0, 0)]
     for i in range(steps + 1):
-        theta = math.radians(i * angle / steps)
-        x = r * math.cos(theta)
-        y = r * math.sin(theta)
-        points.append((x, y))
-    points.append((0, 0))
-    return points
+        theta = math.radians(i * beta / steps)
+        x = R * math.cos(theta)
+        y = R * math.sin(theta)
+        pts.append((x, y))
+    pts.append((0, 0))
 
+    return {
+        "points": pts,
+        "data": {
+            "R": round(R, 2),
+            "beta": round(beta, 2),
+            "A": round(A, 2)
+        }
+    }
 
 # 2. Frustum Cone
 def generate_frustum_cone(d1, d2, height):

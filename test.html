@@ -33,6 +33,15 @@
         Generate DXF
       </button>
 
+      <!-- Results -->
+      <div id="results" class="mt-6 hidden border-t pt-4 text-gray-700">
+        <h2 class="font-semibold text-lg mb-2">📊 Calculated Values</h2>
+        <ul id="calcList" class="list-disc ml-6 space-y-1"></ul>
+        <button id="downloadBtn" class="mt-4 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">
+          Download DXF
+        </button>
+      </div>
+
       <!-- Loading overlay -->
       <div id="loading" class="hidden absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl">
         <div class="flex flex-col items-center">
@@ -49,6 +58,11 @@
       const fieldsDiv = document.getElementById("fields");
       const shapeSelect = document.getElementById("shape");
       const loadingOverlay = document.getElementById("loading");
+      const resultsDiv = document.getElementById("results");
+      const calcList = document.getElementById("calcList");
+      const downloadBtn = document.getElementById("downloadBtn");
+
+      let lastDXFBase64 = null;
 
       // Shape fields
       const shapeFields = {
@@ -60,8 +74,6 @@
         flange: ["outer_d", "inner_d", "holes", "hole_d"],
         truncated_cylinder: ["diameter", "height", "angle"],
         bend: ["diameter", "bend_angle", "radius", "divisions"],
-
-        // ✅ Correct elbow parameters (same as in Flask)
         elbow: ["R", "alpha", "D", "N", "n"]
       };
 
@@ -97,6 +109,7 @@
       shapeSelect.addEventListener("change", () => {
         const shape = shapeSelect.value;
         fieldsDiv.innerHTML = "";
+        resultsDiv.classList.add("hidden");
         if (shape && shapeFields[shape]) {
           shapeFields[shape].forEach(f => {
             const label = document.createElement("label");
@@ -138,10 +151,10 @@
         console.log("🟦 Payload sent:", payload);
 
         loadingOverlay.classList.remove("hidden");
+        resultsDiv.classList.add("hidden");
 
         try {
-          // Change this URL if your backend is hosted online
-          const res = await fetch("https://flat-pattern-production.up.railway.app/generate_dxf", {
+          const res = await fetch("http://127.0.0.1:5000/generate_dxf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -149,21 +162,50 @@
 
           if (!res.ok) throw new Error("Error generating DXF");
 
-          const blob = await res.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${shape}.dxf`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          window.URL.revokeObjectURL(url);
+          const json = await res.json();
+          console.log("✅ Response:", json);
+
+          // Display calculations
+          calcList.innerHTML = "";
+          if (json.data) {
+            for (const [k, v] of Object.entries(json.data)) {
+              const li = document.createElement("li");
+              li.textContent = `${k} = ${v}`;
+              calcList.appendChild(li);
+            }
+          }
+
+          resultsDiv.classList.remove("hidden");
+
+          // Store DXF for later download
+          lastDXFBase64 = json.dxf_base64;
+
         } catch (err) {
           alert(err.message);
+          console.error(err);
         } finally {
           loadingOverlay.classList.add("hidden");
         }
       }
+
+      // Download DXF
+      downloadBtn.addEventListener("click", () => {
+        if (!lastDXFBase64) return alert("No DXF available yet!");
+
+        const byteChars = atob(lastDXFBase64);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+          byteNumbers[i] = byteChars.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/dxf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${shapeSelect.value}.dxf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
     </script>
   </body>
 </html>

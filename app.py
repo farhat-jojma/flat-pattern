@@ -6,6 +6,7 @@ import math
 import os
 import traceback
 import sys
+import base64
 
 # --- Import shape generators ---
 try:
@@ -58,11 +59,11 @@ def generate_dxf():
         # ---------------------- SHAPES ----------------------
 
         if shape == "cone":
-            pts = generate_cone(
+            result = generate_cone(
                 float(params["diameter"]),
                 float(params["height"])
             )
-            msp.add_lwpolyline(pts, close=True)
+            msp.add_lwpolyline(result["points"], close=True)
 
         elif shape == "frustum_cone":
             pts = generate_frustum_cone(
@@ -153,7 +154,6 @@ def generate_dxf():
             return jsonify({"error": f"Shape '{shape}' not supported"}), 400
 
         # ---------------------- DXF EXPORT ----------------------
-
         buffer = io.BytesIO()
         try:
             doc.write(stream=buffer)
@@ -165,12 +165,21 @@ def generate_dxf():
 
         buffer.seek(0)
 
-        return send_file(
-            buffer,
-            as_attachment=True,
-            download_name=f"{shape}.dxf",
-            mimetype="application/dxf"
-        )
+        # Encode DXF as Base64 string
+        dxf_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+
+        # ✅ Combine DXF + calculation data (if any)
+        response_data = {
+            "shape": shape,
+            "dxf_base64": dxf_base64
+        }
+
+        # Add calculation data if available
+        if isinstance(result, dict) and "data" in result:
+            response_data["data"] = result["data"]
+
+        # Return everything together as JSON
+        return jsonify(response_data)
 
     except Exception as e:
         print("Error:", e, file=sys.stderr)
