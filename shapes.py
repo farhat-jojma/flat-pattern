@@ -164,12 +164,17 @@ def generate_frustum_cone_triangulation(d1, d2, value, mode="H", n=12):
 def generate_pyramid(AA, AB, H):
     """
     Génère le développé d'une pyramide à base rectangulaire.
-    AA = longueur du côté de base (en mm)
-    AB = largeur du côté de base (en mm)
-    H = hauteur verticale (en mm)
-    Retourne une liste de polygones (1 par face).
+    Entrées :
+        AA = longueur du côté de base (mm)
+        AB = largeur du côté de base (mm)
+        H  = hauteur verticale (mm)
+    Retour :
+        - faces DXF (inchangées)
+        - données calculées : OI, OC, IB, CA
     """
-    # Points de la base dans le plan XY
+    import math
+
+    # Points de la base
     base_points = [
         (0, 0),          # A
         (AA, 0),         # B
@@ -177,27 +182,36 @@ def generate_pyramid(AA, AB, H):
         (0, AB)          # A'
     ]
 
-    # Centre de la base (C)
+    # Centre de la base
     Cx = AA / 2
     Cy = AB / 2
 
-    # Calcul des longueurs inclinées (slant heights)
-    slant1 = math.sqrt((AA / 2) ** 2 + H ** 2)  # côté parallèle à AA
-    slant2 = math.sqrt((AB / 2) ** 2 + H ** 2)  # côté parallèle à AB
+    # Longueurs inclinées
+    slant1 = math.sqrt((AA / 2) ** 2 + H ** 2)
+    slant2 = math.sqrt((AB / 2) ** 2 + H ** 2)
 
-    # Génération des faces (triangles)
+    # Génération des faces (inchangée)
     faces = []
+    faces.append([(0, 0), (AA, 0), (Cx, -slant1)])              # Avant
+    faces.append([(AA, 0), (AA, AB), (AA + slant2, Cy)])        # Droite
+    faces.append([(0, AB), (AA, AB), (Cx, AB + slant1)])        # Arrière
+    faces.append([(0, 0), (0, AB), (-slant2, Cy)])              # Gauche
 
-    # Face avant
-    faces.append([(0, 0), (AA, 0), (Cx, -slant1)])
-    # Face droite
-    faces.append([(AA, 0), (AA, AB), (AA + slant2, Cy)])
-    # Face arrière
-    faces.append([(0, AB), (AA, AB), (Cx, AB + slant1)])
-    # Face gauche
-    faces.append([(0, 0), (0, AB), (-slant2, Cy)])
+    # --- Calculs à retourner ---
+    OI = AA / 2
+    OC = AB / 2
+    IB = slant1
+    CA = slant2
 
-    return faces
+    data = {
+        "OI (mm)": round(OI, 2),
+        "OC (mm)": round(OC, 2),
+        "IB (mm)": round(IB, 2),
+        "CA (mm)": round(CA, 2),
+    }
+
+    return {"faces": faces, "data": data}
+
 # 5. Rectangle to Rectangle
 def generate_rectangle_to_rectangle(w1, h1, w2, h2, height):
     return [

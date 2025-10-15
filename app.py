@@ -106,15 +106,17 @@ def generate_dxf():
             # Draw internal generator lines
             for line in result["generators"]:
                 msp.add_line(line[0], line[1])
-
-
+                
         elif shape == "pyramid":
             AA = float(params["AA"])
             AB = float(params["AB"])
             H = float(params["H"])
-            faces = generate_pyramid(AA, AB, H)
-            for face in faces:
+
+            result = generate_pyramid(AA, AB, H)
+            for face in result["faces"]:
                 msp.add_lwpolyline(face, close=True)
+
+            response_data = result["data"]
 
         elif shape == "rectangle_to_rectangle":
             pts = generate_rectangle_to_rectangle(
