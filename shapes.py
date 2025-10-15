@@ -99,17 +99,66 @@ def generate_frustum_cone(d1, d2, value, mode="H"):
     return {"points": pts, "data": data}
 
 # 3. Frustum Cone (Triangulation)
-def generate_frustum_cone_triangulation(d1, d2, height, n=24):
-    r1 = d1 / 2
-    r2 = d2 / 2
-    step = 2 * math.pi / n
-    points_top = []
-    points_bottom = []
+def generate_frustum_cone_triangulation(d1, d2, value, mode="H", n=12):
+    import math
+
+    D1, D2 = float(d1), float(d2)
+
+    # --- Determine geometry like normal frustum_cone ---
+    if mode.upper() == "H":
+        H = value
+        R1 = math.sqrt(H**2 + (D1 / 2)**2)
+        R2 = math.sqrt(H**2 + (D2 / 2)**2)
+        beta = 360 * (D1 - D2) / (2 * math.pi * R1)
+    else:
+        beta = float(value)
+        if beta <= 0:
+            raise ValueError("Beta must be > 0°.")
+        beta_max = 360 * (D1 - D2) / (math.pi * D1)
+        if beta > beta_max:
+            beta = beta_max
+        R_slant = (D1 - D2) * 180 / (math.pi * beta)
+        R_outer = R_slant * (D1 / (D1 - D2))
+        R_inner = R_slant * (D2 / (D1 - D2))
+        diff = max(R_outer**2 - (D1 / 2)**2, 0)
+        H = math.sqrt(diff)
+        R1, R2 = R_outer, R_inner
+
+    # --- Outline (same as normal frustum_cone) ---
+    steps = 200
+    outer, inner = [], []
+    start_angle = -beta / 2
+    for i in range(steps + 1):
+        θ = math.radians(start_angle + i * (beta / steps))
+        outer.append((R1 * math.cos(θ), R1 * math.sin(θ)))
+        inner.append((R2 * math.cos(θ), R2 * math.sin(θ)))
+    inner.reverse()
+    pts = outer + inner + [outer[0]]
+
+    # --- Generator lines ---
+    generators = []
     for i in range(n + 1):
-        theta = i * step
-        points_top.append((r1 * math.cos(theta), r1 * math.sin(theta)))
-        points_bottom.append((r2 * math.cos(theta), r2 * math.sin(theta)))
-    return points_top + list(reversed(points_bottom))
+        θ = math.radians(start_angle + i * (beta / n))
+        p1 = (R1 * math.cos(θ), R1 * math.sin(θ))
+        p2 = (R2 * math.cos(θ), R2 * math.sin(θ))
+        generators.append((p1, p2))
+
+    # --- Calculations shown in picture ---
+    # Small central triangle parameters
+    a = round(math.degrees(beta / (2 * n)), 2)   # half-angle between two generators
+    b = round(math.degrees(beta / n), 2)         # full angle between two adjacent generators
+
+    L1 = round(R2, 2)
+    L2 = round(R1, 2)
+
+    data = {
+        "a (°)": a,
+        "b (°)": b,
+        "L1 (mm)": L1,
+        "L2 (mm)": L2
+    }
+
+    return {"points": pts, "generators": generators, "data": data}
 
 # 4. Pyramid (sheet metal version, supports K-factor & bend allowance)
 def generate_pyramid(AA, AB, H):
@@ -156,7 +205,6 @@ def generate_rectangle_to_rectangle(w1, h1, w2, h2, height):
         (0, height), (w2, height), (w2, h2 + height), (0, h2 + height), (0, height)
     ]
 
-
 # 6. Flange
 def generate_flange(outer_d, inner_d, holes, hole_d):
     points = []
@@ -166,7 +214,6 @@ def generate_flange(outer_d, inner_d, holes, hole_d):
         points.append((outer_d/2 * math.cos(theta), outer_d/2 * math.sin(theta)))
     points.append(points[0])
     return points
-
 
 # 7. Truncated Cylinder
 def generate_truncated_cylinder(diameter, height, angle):

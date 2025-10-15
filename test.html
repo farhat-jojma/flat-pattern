@@ -63,16 +63,15 @@
       const downloadBtn = document.getElementById("downloadBtn");
       let lastDXFBase64 = null;
 
-      // Default demo values
       const defaultValues = {
         diameter: 200,
         height: 200,
         diameter1: 300,
         diameter2: 150,
         beta: 120,
+        n: 6,
       };
 
-      // Shape fields
       const shapeFields = {
         cone: ["diameter", "height"],
         pyramid: ["AA", "AB", "H"],
@@ -83,15 +82,12 @@
         elbow: ["R", "alpha", "D", "N", "n"]
       };
 
-      // Generate input fields
       shapeSelect.addEventListener("change", () => {
         const shape = shapeSelect.value;
         fieldsDiv.innerHTML = "";
         resultsDiv.classList.add("hidden");
 
-        // Special behavior for frustum_cone
         if (shape === "frustum_cone") {
-          // Diameters always required
           const fields = ["diameter1", "diameter2"];
           fields.forEach(f => {
             const label = document.createElement("label");
@@ -108,7 +104,6 @@
             fieldsDiv.appendChild(input);
           });
 
-          // Radio buttons for mode selection
           const modeDiv = document.createElement("div");
           modeDiv.className = "mt-4";
           modeDiv.innerHTML = `
@@ -122,7 +117,6 @@
           `;
           fieldsDiv.appendChild(modeDiv);
 
-          // Input for height or beta
           const extraDiv = document.createElement("div");
           extraDiv.id = "extraField";
           extraDiv.className = "mt-3";
@@ -132,7 +126,6 @@
           `;
           fieldsDiv.appendChild(extraDiv);
 
-          // Toggle between Height and Beta
           modeDiv.querySelectorAll("input[name='mode']").forEach(radio => {
             radio.addEventListener("change", () => {
               const val = document.querySelector("input[name='mode']:checked").value;
@@ -150,7 +143,29 @@
             });
           });
         } 
-        // For all other shapes
+        else if (shape === "frustum_cone_triangulation") {
+          const labels = [
+            { id: "diameter1", label: "Large Diameter (D1 mm)" },
+            { id: "diameter2", label: "Small Diameter (D2 mm)" },
+            { id: "height", label: "Height (H mm)" },
+            { id: "n", label: "Number of Generators (n)" }
+          ];
+
+          labels.forEach(f => {
+            const lbl = document.createElement("label");
+            lbl.className = "block mt-2 font-medium";
+            lbl.textContent = f.label;
+
+            const input = document.createElement("input");
+            input.type = "number";
+            input.id = f.id;
+            input.className = "w-full border rounded p-2 mt-1";
+            input.step = "any";
+            if (defaultValues[f.id] !== undefined) input.value = defaultValues[f.id];
+            fieldsDiv.appendChild(lbl);
+            fieldsDiv.appendChild(input);
+          });
+        }
         else if (shape && shapeFields[shape]) {
           shapeFields[shape].forEach(f => {
             const label = document.createElement("label");
@@ -161,7 +176,6 @@
             input.type = "number";
             input.id = f;
             input.className = "w-full border rounded p-2 mt-1";
-            input.placeholder = f;
             input.step = "any";
             if (defaultValues[f] !== undefined) input.value = defaultValues[f];
             fieldsDiv.appendChild(label);
@@ -170,7 +184,6 @@
         }
       });
 
-      // Generate DXF file
       async function generateDXF() {
         const shape = shapeSelect.value;
         if (!shape) {
@@ -179,7 +192,6 @@
         }
 
         const params = {};
-
         if (shape === "frustum_cone") {
           const d1 = parseFloat(document.getElementById("diameter1").value);
           const d2 = parseFloat(document.getElementById("diameter2").value);
@@ -188,13 +200,16 @@
           params["diameter1"] = d1;
           params["diameter2"] = d2;
           params["mode"] = mode;
-
-          if (mode === "H") {
-            params["height"] = parseFloat(document.getElementById("height").value);
-          } else {
-            params["beta"] = parseFloat(document.getElementById("beta").value);
-          }
-        } else {
+          if (mode === "H") params["height"] = parseFloat(document.getElementById("height").value);
+          else params["beta"] = parseFloat(document.getElementById("beta").value);
+        } 
+        else if (shape === "frustum_cone_triangulation") {
+          params["diameter1"] = parseFloat(document.getElementById("diameter1").value);
+          params["diameter2"] = parseFloat(document.getElementById("diameter2").value);
+          params["height"] = parseFloat(document.getElementById("height").value);
+          params["n"] = parseInt(document.getElementById("n").value);
+        } 
+        else {
           if (shapeFields[shape]) {
             shapeFields[shape].forEach(f => {
               const val = parseFloat(document.getElementById(f).value);
@@ -210,7 +225,7 @@
         resultsDiv.classList.add("hidden");
 
         try {
-          const res = await fetch("https://flat-pattern-production.up.railway.app//generate_dxf", {
+          const res = await fetch("https://flat-pattern-production.up.railway.app/generate_dxf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -220,7 +235,6 @@
           const json = await res.json();
           console.log("✅ Response:", json);
 
-          // Display calculations
           calcList.innerHTML = "";
           if (json.data) {
             for (const [k, v] of Object.entries(json.data)) {
@@ -240,7 +254,6 @@
         }
       }
 
-      // Download DXF
       downloadBtn.addEventListener("click", () => {
         if (!lastDXFBase64) return alert("No DXF available yet!");
         const byteChars = atob(lastDXFBase64);
