@@ -163,43 +163,62 @@ def generate_frustum_cone_triangulation(d1, d2, value, mode="H", n=12):
 # 4. Pyramid (sheet metal version, supports K-factor & bend allowance)
 def generate_pyramid(AA, AB, H):
     """
-    Génère le développé d'une pyramide à base rectangulaire.
+    Génère le développé d'une pyramide à base rectangulaire parfaitement refermable.
     Entrées :
-        AA = longueur du côté de base (mm)
-        AB = largeur du côté de base (mm)
+        AA = longueur de base (mm)
+        AB = largeur de base (mm)
         H  = hauteur verticale (mm)
     Retour :
-        - faces DXF (inchangées)
-        - données calculées : OI, OC, IB, CA
+        faces développées + calculs OI, OC, IB, CA
     """
     import math
 
-    # Points de la base
-    base_points = [
-        (0, 0),          # A
-        (AA, 0),         # B
-        (AA, AB),        # B'
-        (0, AB)          # A'
-    ]
-
-    # Centre de la base
+    # --- Données de base ---
     Cx = AA / 2
     Cy = AB / 2
 
-    # Longueurs inclinées
-    slant1 = math.sqrt((AA / 2) ** 2 + H ** 2)
-    slant2 = math.sqrt((AB / 2) ** 2 + H ** 2)
+    # Slant heights
+    slant1 = math.sqrt(Cx**2 + H**2)  # pour faces avant/arrière
+    slant2 = math.sqrt(Cy**2 + H**2)  # pour faces gauche/droite
 
-    # Génération des faces (inchangée)
+    # Angle du sommet pour ajuster la rotation des faces
+    alpha_x = math.atan(H / Cx)  # angle inclinaison avant/arrière
+    alpha_y = math.atan(H / Cy)  # angle inclinaison gauche/droite
+
+    # --- Développement (à plat) ---
     faces = []
-    faces.append([(0, 0), (AA, 0), (Cx, -slant1)])              # Avant
-    faces.append([(AA, 0), (AA, AB), (AA + slant2, Cy)])        # Droite
-    faces.append([(0, AB), (AA, AB), (Cx, AB + slant1)])        # Arrière
-    faces.append([(0, 0), (0, AB), (-slant2, Cy)])              # Gauche
 
-    # --- Calculs à retourner ---
-    OI = AA / 2
-    OC = AB / 2
+    # Face avant (triangle isocèle)
+    faces.append([
+        (0, 0),
+        (AA, 0),
+        (AA / 2, -slant1)
+    ])
+
+    # Face droite
+    faces.append([
+        (AA, 0),
+        (AA, AB),
+        (AA + slant2, AB / 2)
+    ])
+
+    # Face arrière
+    faces.append([
+        (0, AB),
+        (AA, AB),
+        (AA / 2, AB + slant1)
+    ])
+
+    # Face gauche
+    faces.append([
+        (0, 0),
+        (0, AB),
+        (-slant2, AB / 2)
+    ])
+
+    # --- Données calculées ---
+    OI = Cx
+    OC = Cy
     IB = slant1
     CA = slant2
 
@@ -207,17 +226,92 @@ def generate_pyramid(AA, AB, H):
         "OI (mm)": round(OI, 2),
         "OC (mm)": round(OC, 2),
         "IB (mm)": round(IB, 2),
-        "CA (mm)": round(CA, 2),
+        "CA (mm)": round(CA, 2)
     }
 
     return {"faces": faces, "data": data}
 
 # 5. Rectangle to Rectangle
-def generate_rectangle_to_rectangle(w1, h1, w2, h2, height):
-    return [
-        (0, 0), (w1, 0), (w1, h1), (0, h1), (0, 0),
-        (0, height), (w2, height), (w2, h2 + height), (0, h2 + height), (0, height)
+def generate_rectangle_to_rectangle(ab, bc, H, AB, BC):
+    """
+    Génère le développé d'une transition rectangle-rectangle avec le haut inclus.
+    Entrées :
+        ab, bc : dimensions du rectangle supérieur
+        AB, BC : dimensions du rectangle inférieur
+        H : hauteur verticale (mm)
+    Sortie :
+        - pts DXF (faces développées)
+        - données calculées : Aa, Ba, Cb
+    """
+    import math
+
+    # --- Calculs géométriques ---
+    Aa = math.sqrt(((AB - ab) / 2) ** 2 + H**2)
+    Ba = math.sqrt(((BC - bc) / 2) ** 2 + H**2)
+    Cb = math.sqrt(Aa**2 + Ba**2)
+
+    # --- Développement 2D ---
+    faces = []
+
+    # Base (rectangle du bas)
+    base = [(0, 0), (AB, 0), (AB, BC), (0, BC)]
+    faces.append(base)
+
+    # Face avant (haut du bas)
+    face_front = [
+        (0, 0),
+        (AB, 0),
+        (AB - (AB - ab) / 2, -Aa),
+        ((AB - ab) / 2, -Aa)
     ]
+    faces.append(face_front)
+
+    # Face arrière
+    face_back = [
+        (0, BC),
+        (AB, BC),
+        (AB - (AB - ab) / 2, BC + Aa),
+        ((AB - ab) / 2, BC + Aa)
+    ]
+    faces.append(face_back)
+
+    # Face gauche
+    face_left = [
+        (0, 0),
+        (0, BC),
+        (-Ba, BC - (BC - bc) / 2),
+        (-Ba, (BC - bc) / 2)
+    ]
+    faces.append(face_left)
+
+    # Face droite
+    face_right = [
+        (AB, 0),
+        (AB, BC),
+        (AB + Ba, BC - (BC - bc) / 2),
+        (AB + Ba, (BC - bc) / 2)
+    ]
+    faces.append(face_right)
+
+    # ✅ Face du haut (rectangle supérieur)
+    top = [
+        ((AB - ab) / 2, -Aa),
+        (AB - (AB - ab) / 2, -Aa),
+        (AB - (AB - ab) / 2, -Aa - bc),
+        ((AB - ab) / 2, -Aa - bc)
+    ]
+    faces.append(top)
+
+    # --- Données ---
+    data = {
+        "Aa (mm)": round(Aa, 2),
+        "Ba (mm)": round(Ba, 2),
+        "Cb (mm)": round(Cb, 2),
+        "Hauteur (mm)": round(H, 2)
+    }
+
+    return {"faces": faces, "data": data}
+
 
 # 6. Flange
 def generate_flange(outer_d, inner_d, holes, hole_d):

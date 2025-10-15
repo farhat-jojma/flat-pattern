@@ -70,16 +70,21 @@
         diameter2: 150,
         beta: 120,
         n: 6,
+        ab: 200,
+        bc: 150,
+        H: 300,
+        AB: 400,
+        BC: 300
       };
 
       const shapeFields = {
         cone: ["diameter", "height"],
         pyramid: ["AA", "AB", "H"],
-        rectangle_to_rectangle: ["w1", "h1", "w2", "h2", "height"],
         flange: ["outer_d", "inner_d", "holes", "hole_d"],
         truncated_cylinder: ["diameter", "height", "angle"],
         bend: ["diameter", "bend_angle", "radius", "divisions"],
-        elbow: ["R", "alpha", "D", "N", "n"]
+        elbow: ["R", "alpha", "D", "N", "n"],
+        rectangle_to_rectangle: ["ab", "bc", "H", "AB", "BC"]
       };
 
       shapeSelect.addEventListener("change", () => {
@@ -87,6 +92,7 @@
         fieldsDiv.innerHTML = "";
         resultsDiv.classList.add("hidden");
 
+        // --- Frustum cone special behavior ---
         if (shape === "frustum_cone") {
           const fields = ["diameter1", "diameter2"];
           fields.forEach(f => {
@@ -143,6 +149,7 @@
             });
           });
         } 
+        // --- Frustum cone triangulation ---
         else if (shape === "frustum_cone_triangulation") {
           const labels = [
             { id: "diameter1", label: "Large Diameter (D1 mm)" },
@@ -166,11 +173,12 @@
             fieldsDiv.appendChild(input);
           });
         }
+        // --- Default shape handling ---
         else if (shape && shapeFields[shape]) {
           shapeFields[shape].forEach(f => {
             const label = document.createElement("label");
             label.className = "block mt-2 font-medium";
-            label.textContent = `${f.replaceAll("_", " ")} (mm)`;
+            label.textContent = `${f} (mm)`;
 
             const input = document.createElement("input");
             input.type = "number";
@@ -192,11 +200,11 @@
         }
 
         const params = {};
+
         if (shape === "frustum_cone") {
           const d1 = parseFloat(document.getElementById("diameter1").value);
           const d2 = parseFloat(document.getElementById("diameter2").value);
           const mode = document.querySelector("input[name='mode']:checked").value;
-
           params["diameter1"] = d1;
           params["diameter2"] = d2;
           params["mode"] = mode;

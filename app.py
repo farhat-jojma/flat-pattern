@@ -119,14 +119,22 @@ def generate_dxf():
             response_data = result["data"]
 
         elif shape == "rectangle_to_rectangle":
-            pts = generate_rectangle_to_rectangle(
-                float(params["w1"]),
-                float(params["h1"]),
-                float(params["w2"]),
-                float(params["h2"]),
-                float(params["height"]),
-            )
-            msp.add_lwpolyline(pts, close=True)
+            ab = float(params["ab"])
+            bc = float(params["bc"])
+            H = float(params["H"])
+            AB = float(params["AB"])
+            BC = float(params["BC"])
+
+            result = generate_rectangle_to_rectangle(ab, bc, H, AB, BC)
+            
+            # Draw all unfolded faces
+            for face in result["faces"]:
+                msp.add_lwpolyline(face, close=True)
+
+            # Return the calculated data
+            response_data = result["data"]
+
+
 
         elif shape == "flange":
             outer_d = float(params["outer_d"])
