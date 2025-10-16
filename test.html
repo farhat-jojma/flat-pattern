@@ -70,21 +70,31 @@
         diameter2: 150,
         beta: 120,
         n: 6,
+        AA: 200,
+        AB: 150,
+        H: 300,
         ab: 200,
         bc: 150,
-        H: 300,
         AB: 400,
-        BC: 300
+        BC: 300,
+        D1: 50,
+        D2: 80,
+        D3: 120,
+        D4: 150,
+        N1: 6,
+        d1: 8,
+        N2: 4,
+        d2: 12
       };
 
       const shapeFields = {
         cone: ["diameter", "height"],
         pyramid: ["AA", "AB", "H"],
-        flange: ["outer_d", "inner_d", "holes", "hole_d"],
+        rectangle_to_rectangle: ["ab", "bc", "H", "AB", "BC"],
+        flange: ["D1", "D2", "D3", "D4", "N1", "d1", "N2", "d2"],
         truncated_cylinder: ["diameter", "height", "angle"],
         bend: ["diameter", "bend_angle", "radius", "divisions"],
-        elbow: ["R", "alpha", "D", "N", "n"],
-        rectangle_to_rectangle: ["ab", "bc", "H", "AB", "BC"]
+        elbow: ["R", "alpha", "D", "N", "n"]
       };
 
       shapeSelect.addEventListener("change", () => {
@@ -157,7 +167,6 @@
             { id: "height", label: "Height (H mm)" },
             { id: "n", label: "Number of Generators (n)" }
           ];
-
           labels.forEach(f => {
             const lbl = document.createElement("label");
             lbl.className = "block mt-2 font-medium";

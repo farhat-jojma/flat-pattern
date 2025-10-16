@@ -134,21 +134,30 @@ def generate_dxf():
             # Return the calculated data
             response_data = result["data"]
 
-
-
         elif shape == "flange":
-            outer_d = float(params["outer_d"])
-            inner_d = float(params["inner_d"])
-            holes = int(params["holes"])
-            hole_d = float(params["hole_d"])
-            pts = generate_flange(outer_d, inner_d, holes, hole_d)
-            msp.add_lwpolyline(pts, close=True)
-            msp.add_circle((0, 0), inner_d / 2)
-            for i in range(holes):
-                theta = 2 * math.pi * i / holes
-                x = (outer_d / 2 - hole_d) * math.cos(theta)
-                y = (outer_d / 2 - hole_d) * math.sin(theta)
-                msp.add_circle((x, y), hole_d / 2)
+            result = generate_flange(
+                float(params["D1"]),
+                float(params["D2"]),
+                float(params["D3"]),
+                float(params["D4"]),
+                int(params["N1"]),
+                float(params["d1"]),
+                int(params["N2"]),
+                float(params["d2"]),
+            )
+
+            for etype, center, radius in result["entities"]:
+                x, y = center
+                if etype in ("cut", "hole"):
+                    # Draw with LWPolyline — clean path, no center mark
+                    steps = 90
+                    pts = [(x + radius * math.cos(2*math.pi*i/steps),
+                            y + radius * math.sin(2*math.pi*i/steps))
+                        for i in range(steps+1)]
+                    msp.add_lwpolyline(pts, close=True)
+
+            response_data = result["data"]
+
 
         elif shape == "truncated_cylinder":
             pts = generate_truncated_cylinder(

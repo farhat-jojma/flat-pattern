@@ -314,14 +314,42 @@ def generate_rectangle_to_rectangle(ab, bc, H, AB, BC):
 
 
 # 6. Flange
-def generate_flange(outer_d, inner_d, holes, hole_d):
-    points = []
-    steps = 100
-    for i in range(steps):
-        theta = 2 * math.pi * i / steps
-        points.append((outer_d/2 * math.cos(theta), outer_d/2 * math.sin(theta)))
-    points.append(points[0])
-    return points
+def generate_flange(D1, D2, D3, D4, N1, d1, N2, d2):
+    """
+    Flange ready for laser/CNC cutting.
+    Keeps only outer & inner edges + holes.
+    """
+    import math
+    entities = []
+
+    R1 = D1 / 2   # inner hole radius
+    R4 = D4 / 2   # outer contour radius
+
+    # --- Outer and inner rings (cut contours) ---
+    entities.append(("cut", (0, 0), R4))
+    entities.append(("cut", (0, 0), R1))
+
+    # --- Hole set 1 ---
+    for i in range(N1):
+        θ = 2 * math.pi * i / N1
+        x, y = (D2 / 2) * math.cos(θ), (D2 / 2) * math.sin(θ)
+        entities.append(("hole", (x, y), d1 / 2))
+
+    # --- Hole set 2 ---
+    for i in range(N2):
+        θ = 2 * math.pi * i / N2
+        x, y = (D3 / 2) * math.cos(θ), (D3 / 2) * math.sin(θ)
+        entities.append(("hole", (x, y), d2 / 2))
+
+    # --- Calculated data ---
+    data = {
+        "A1 (mm)": round(math.pi * D2, 2),
+        "a1 (°)": round(360 / N1, 2) if N1 else 0,
+        "A2 (mm)": round(math.pi * D3, 2),
+        "a2 (°)": round(360 / N2, 2) if N2 else 0,
+    }
+
+    return {"entities": entities, "data": data}
 
 # 7. Truncated Cylinder
 def generate_truncated_cylinder(diameter, height, angle):
