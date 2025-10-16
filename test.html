@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DXF Generator Test</title>
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
@@ -10,7 +11,7 @@
       <h1 class="text-2xl font-bold mb-4 text-center">DXF Generator Test</h1>
 
       <!-- Shape selection -->
-      <label class="block mb-2 font-semibold">Select Shape:</label>
+      <label for="shape" class="block mb-2 font-semibold">Select Shape:</label>
       <select id="shape" class="w-full border rounded p-2 mb-4">
         <option value="">-- Choose a shape --</option>
         <option value="cone">Cone</option>
@@ -65,11 +66,12 @@
 
       const defaultValues = {
         diameter: 200,
-        height: 200,
+        height: 100,
+        angle: 20,
+        n: 4,
         diameter1: 300,
         diameter2: 150,
         beta: 120,
-        n: 6,
         AA: 200,
         AB: 150,
         H: 300,
@@ -92,7 +94,8 @@
         pyramid: ["AA", "AB", "H"],
         rectangle_to_rectangle: ["ab", "bc", "H", "AB", "BC"],
         flange: ["D1", "D2", "D3", "D4", "N1", "d1", "N2", "d2"],
-        truncated_cylinder: ["diameter", "height", "angle"],
+        // ✅ updated for new parameters
+        truncated_cylinder: ["diameter", "height", "angle", "n"],
         bend: ["diameter", "bend_angle", "radius", "divisions"],
         elbow: ["R", "alpha", "D", "N", "n"]
       };
@@ -102,92 +105,11 @@
         fieldsDiv.innerHTML = "";
         resultsDiv.classList.add("hidden");
 
-        // --- Frustum cone special behavior ---
-        if (shape === "frustum_cone") {
-          const fields = ["diameter1", "diameter2"];
-          fields.forEach(f => {
-            const label = document.createElement("label");
-            label.className = "block mt-2 font-medium";
-            label.textContent = `${f.replaceAll("_", " ")} (mm)`;
-
-            const input = document.createElement("input");
-            input.type = "number";
-            input.id = f;
-            input.className = "w-full border rounded p-2 mt-1";
-            input.step = "any";
-            if (defaultValues[f] !== undefined) input.value = defaultValues[f];
-            fieldsDiv.appendChild(label);
-            fieldsDiv.appendChild(input);
-          });
-
-          const modeDiv = document.createElement("div");
-          modeDiv.className = "mt-4";
-          modeDiv.innerHTML = `
-            <p class="font-semibold mb-2">Calculation Mode:</p>
-            <label class="mr-4">
-              <input type="radio" name="mode" value="H" checked class="mr-1" /> Height (H)
-            </label>
-            <label>
-              <input type="radio" name="mode" value="B" class="mr-1" /> Beta (β)
-            </label>
-          `;
-          fieldsDiv.appendChild(modeDiv);
-
-          const extraDiv = document.createElement("div");
-          extraDiv.id = "extraField";
-          extraDiv.className = "mt-3";
-          extraDiv.innerHTML = `
-            <label class="block font-medium">Height (H mm)</label>
-            <input type="number" id="height" class="w-full border rounded p-2 mt-1" step="any" value="${defaultValues.height}" />
-          `;
-          fieldsDiv.appendChild(extraDiv);
-
-          modeDiv.querySelectorAll("input[name='mode']").forEach(radio => {
-            radio.addEventListener("change", () => {
-              const val = document.querySelector("input[name='mode']:checked").value;
-              if (val === "H") {
-                extraDiv.innerHTML = `
-                  <label class="block font-medium">Height (H mm)</label>
-                  <input type="number" id="height" class="w-full border rounded p-2 mt-1" step="any" value="${defaultValues.height}" />
-                `;
-              } else {
-                extraDiv.innerHTML = `
-                  <label class="block font-medium">Beta (°)</label>
-                  <input type="number" id="beta" class="w-full border rounded p-2 mt-1" step="any" value="${defaultValues.beta}" />
-                `;
-              }
-            });
-          });
-        } 
-        // --- Frustum cone triangulation ---
-        else if (shape === "frustum_cone_triangulation") {
-          const labels = [
-            { id: "diameter1", label: "Large Diameter (D1 mm)" },
-            { id: "diameter2", label: "Small Diameter (D2 mm)" },
-            { id: "height", label: "Height (H mm)" },
-            { id: "n", label: "Number of Generators (n)" }
-          ];
-          labels.forEach(f => {
-            const lbl = document.createElement("label");
-            lbl.className = "block mt-2 font-medium";
-            lbl.textContent = f.label;
-
-            const input = document.createElement("input");
-            input.type = "number";
-            input.id = f.id;
-            input.className = "w-full border rounded p-2 mt-1";
-            input.step = "any";
-            if (defaultValues[f.id] !== undefined) input.value = defaultValues[f.id];
-            fieldsDiv.appendChild(lbl);
-            fieldsDiv.appendChild(input);
-          });
-        }
-        // --- Default shape handling ---
-        else if (shape && shapeFields[shape]) {
+        if (shape && shapeFields[shape]) {
           shapeFields[shape].forEach(f => {
             const label = document.createElement("label");
             label.className = "block mt-2 font-medium";
-            label.textContent = `${f} (mm)`;
+            label.textContent = `${f} ${f === "angle" ? "(°)" : "(mm)"}`;
 
             const input = document.createElement("input");
             input.type = "number";
@@ -209,30 +131,11 @@
         }
 
         const params = {};
-
-        if (shape === "frustum_cone") {
-          const d1 = parseFloat(document.getElementById("diameter1").value);
-          const d2 = parseFloat(document.getElementById("diameter2").value);
-          const mode = document.querySelector("input[name='mode']:checked").value;
-          params["diameter1"] = d1;
-          params["diameter2"] = d2;
-          params["mode"] = mode;
-          if (mode === "H") params["height"] = parseFloat(document.getElementById("height").value);
-          else params["beta"] = parseFloat(document.getElementById("beta").value);
-        } 
-        else if (shape === "frustum_cone_triangulation") {
-          params["diameter1"] = parseFloat(document.getElementById("diameter1").value);
-          params["diameter2"] = parseFloat(document.getElementById("diameter2").value);
-          params["height"] = parseFloat(document.getElementById("height").value);
-          params["n"] = parseInt(document.getElementById("n").value);
-        } 
-        else {
-          if (shapeFields[shape]) {
-            shapeFields[shape].forEach(f => {
-              const val = parseFloat(document.getElementById(f).value);
-              if (!isNaN(val)) params[f] = val;
-            });
-          }
+        if (shapeFields[shape]) {
+          shapeFields[shape].forEach(f => {
+            const val = parseFloat(document.getElementById(f).value);
+            if (!isNaN(val)) params[f] = val;
+          });
         }
 
         const payload = { shape, params };
@@ -256,7 +159,12 @@
           if (json.data) {
             for (const [k, v] of Object.entries(json.data)) {
               const li = document.createElement("li");
-              li.textContent = `${k} = ${v}`;
+              // handle array output (like h_values)
+              if (Array.isArray(v)) {
+                li.textContent = `${k} = [${v.join(", ")}]`;
+              } else {
+                li.textContent = `${k} = ${v}`;
+              }
               calcList.appendChild(li);
             }
           }

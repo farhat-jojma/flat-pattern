@@ -158,14 +158,15 @@ def generate_dxf():
 
             response_data = result["data"]
 
-
         elif shape == "truncated_cylinder":
-            pts = generate_truncated_cylinder(
+            result = generate_truncated_cylinder(
                 float(params["diameter"]),
                 float(params["height"]),
                 float(params["angle"]),
+                int(params["n"])
             )
-            msp.add_lwpolyline(pts, close=True)
+            return jsonify(result)
+        
 
         elif shape == "elbow":
             R = float(params["R"])
