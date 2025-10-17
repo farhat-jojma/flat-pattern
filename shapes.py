@@ -422,6 +422,7 @@ def generate_elbow(R, alpha_deg, D, N, n):
     l = piD / n
     H = D
     y_center = H / 2
+    alpha_rad = math.radians(alpha_deg)
 
     # Amplitude et écart vertical entre les ondes
     A = D * 0.15
@@ -431,7 +432,7 @@ def generate_elbow(R, alpha_deg, D, N, n):
     def wave(x):
         return A * math.sin((2 * math.pi * x / piD) - math.pi / 2)
 
-    top_pts, bot_pts = [], []
+    top_pts, bot_pts, h_vals = [], [], []
 
     for i in range(n + 1):
         x = i * l
@@ -439,6 +440,7 @@ def generate_elbow(R, alpha_deg, D, N, n):
         y_bot = y_center - gap / 2 - wave(x)
         top_pts.append((x, y_top))
         bot_pts.append((x, y_bot))
+        h_vals.append(round(wave(x), 2))
 
     # --- Création DXF ---
     doc = ezdxf.new()
@@ -457,7 +459,9 @@ def generate_elbow(R, alpha_deg, D, N, n):
     return {
         "data": {
             "piD": round(piD, 2),
-            "amplitude": round(A, 2),
+            "A": round(A, 2),
+            "l": round(l, 2),
+            "h_vals": h_vals,
             "gap": round(gap, 2),
         },
         "dxf_base64": dxf_b64
