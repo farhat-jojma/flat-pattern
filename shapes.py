@@ -409,55 +409,56 @@ def generate_truncated_cylinder(diameter, height, angle_deg, n):
     }
 
 # 8. Bend
-def generate_elbow(R, alpha, D, N, n):
+import math, ezdxf, io, base64
+
+def generate_elbow(R, alpha_deg, D, N, n):
     """
-    Realistic elbow flat pattern:
-    - rectangle of width πD and height D
-    - two identical arcs (not mirrored) offset vertically
-    - geometry based on cylindrical intersection, no crossing
+    Génère un développé rectangulaire avec deux bords sinusoïdaux
+    parfaitement symétriques, phase corrigée (crête à gauche).
     """
 
-    # basic parameters
-    alpha_sector = math.radians(alpha / N)
+    # --- Géométrie de base ---
     piD = math.pi * D
-    step = piD / n
+    l = piD / n
     H = D
-    center_y = H / 2
+    y_center = H / 2
 
-    # compute intersection heights (single arc shape)
-    h_vals = []
+    # Amplitude et écart vertical entre les ondes
+    A = D * 0.15
+    gap = D * 0.5
+
+    # --- Onde sinusoïdale (phase corrigée : départ en crête) ---
+    def wave(x):
+        return A * math.sin((2 * math.pi * x / piD) - math.pi / 2)
+
+    top_pts, bot_pts = [], []
+
     for i in range(n + 1):
-        theta = math.radians(i * 360 / n)
-        h = R * (1 - math.cos(alpha_sector / 2)) + R * math.sin(alpha_sector / 2) * math.sin(theta)
-        h_vals.append(h)
+        x = i * l
+        y_top = y_center + gap / 2 + wave(x)
+        y_bot = y_center - gap / 2 - wave(x)
+        top_pts.append((x, y_top))
+        bot_pts.append((x, y_bot))
 
-    # normalize so the arc sits roughly mid-height
-    h_min, h_max = min(h_vals), max(h_vals)
-    amplitude = h_max - h_min
-    base = center_y - amplitude / 2
+    # --- Création DXF ---
+    doc = ezdxf.new()
+    msp = doc.modelspace()
 
-    # distance between upper and lower edges of band
-    gap = amplitude * 1.2  # constant vertical offset; adjust for visual spacing
+    rect = [(0, 0), (piD, 0), (piD, H), (0, H), (0, 0)]
+    msp.add_lwpolyline(rect, close=True)
+    msp.add_spline(top_pts, dxfattribs={"color": 5})
+    msp.add_spline(bot_pts, dxfattribs={"color": 5})
 
-    points_top = []
-    points_bottom = []
-
-    for i, h in enumerate(h_vals):
-        x = i * step
-        # both arcs go in the same direction; bottom is just offset downwards
-        y_top = base + h + gap / 2
-        y_bottom = base + h - gap / 2
-        points_top.append((x, y_top))
-        points_bottom.append((x, y_bottom))
-
-    # outer rectangle for reference
-    rect = [(0, 0), (piD, 0), (piD, H), (0, H)]
+    # --- Encodage DXF ---
+    buf = io.StringIO()
+    doc.write(buf)
+    dxf_b64 = base64.b64encode(buf.getvalue().encode("utf-8")).decode("utf-8")
 
     return {
-        "A": points_top,
-        "B": points_bottom,
-        "rect": rect,
-        "piD": piD,
-        "step": step,
+        "data": {
+            "piD": round(piD, 2),
+            "amplitude": round(A, 2),
+            "gap": round(gap, 2),
+        },
+        "dxf_base64": dxf_b64
     }
-

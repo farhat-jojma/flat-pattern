@@ -167,7 +167,6 @@ def generate_dxf():
             )
             return jsonify(result)
         
-
         elif shape == "elbow":
             R = float(params["R"])
             alpha = float(params["alpha"])
@@ -175,9 +174,9 @@ def generate_dxf():
             N = int(params["N"])
             n = int(params["n"])
             result = generate_elbow(R, alpha, D, N, n)
-            msp.add_lwpolyline(result["rect"], close=True)
-            msp.add_lwpolyline(result["A"])
-            msp.add_lwpolyline(result["B"])
+            return jsonify(result)
+
+
 
         else:
             return jsonify({"error": f"Shape '{shape}' not supported"}), 400

@@ -64,6 +64,7 @@
       const downloadBtn = document.getElementById("downloadBtn");
       let lastDXFBase64 = null;
 
+      // Default values for quick testing
       const defaultValues = {
         diameter: 200,
         height: 100,
@@ -86,18 +87,33 @@
         N1: 6,
         d1: 8,
         N2: 4,
-        d2: 12
+        d2: 12,
+        // 👇 elbow defaults
+        R: 200,
+        alpha: 90,
+        D: 100,
+        N: 4,
+        n: 4
       };
 
+      // Define fields per shape
       const shapeFields = {
         cone: ["diameter", "height"],
         pyramid: ["AA", "AB", "H"],
         rectangle_to_rectangle: ["ab", "bc", "H", "AB", "BC"],
         flange: ["D1", "D2", "D3", "D4", "N1", "d1", "N2", "d2"],
-        // ✅ updated for new parameters
         truncated_cylinder: ["diameter", "height", "angle", "n"],
         bend: ["diameter", "bend_angle", "radius", "divisions"],
         elbow: ["R", "alpha", "D", "N", "n"]
+      };
+
+      // Label translations for elbow clarity
+      const labelMap = {
+        R: "R (Rayon de courbure, mm)",
+        alpha: "α (Angle de courbure, °)",
+        D: "D (Diamètre du tuyau, mm)",
+        N: "N (Nombre de secteurs)",
+        n: "n (Nombre de génératrices)"
       };
 
       shapeSelect.addEventListener("change", () => {
@@ -109,7 +125,7 @@
           shapeFields[shape].forEach(f => {
             const label = document.createElement("label");
             label.className = "block mt-2 font-medium";
-            label.textContent = `${f} ${f === "angle" ? "(°)" : "(mm)"}`;
+            label.textContent = labelMap[f] || `${f} ${f === "angle" ? "(°)" : "(mm)"}`;
 
             const input = document.createElement("input");
             input.type = "number";
@@ -145,7 +161,7 @@
         resultsDiv.classList.add("hidden");
 
         try {
-          const res = await fetch("https://flat-pattern-production.up.railway.app/generate_dxf", {
+          const res = await fetch("http://127.0.0.1:5000/generate_dxf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -159,11 +175,13 @@
           if (json.data) {
             for (const [k, v] of Object.entries(json.data)) {
               const li = document.createElement("li");
-              // handle array output (like h_values)
               if (Array.isArray(v)) {
-                li.textContent = `${k} = [${v.join(", ")}]`;
+                // if it's an array (like h_values), format nicely
+                li.innerHTML = `<strong>${k}</strong>: ${v
+                  .map((num, i) => `h${i + 1} = ${num}`)
+                  .join(", ")}`;
               } else {
-                li.textContent = `${k} = ${v}`;
+                li.innerHTML = `<strong>${k}</strong>: ${v}`;
               }
               calcList.appendChild(li);
             }
