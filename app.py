@@ -23,7 +23,10 @@ try:
         generate_offset_cone,
         generate_sphere,
         generate_rectangle_to_circle,
-        generate_rectangle_to_circle_ecc
+        generate_rectangle_to_circle_ecc,
+        generate_frustum_ecc_angle,
+        generate_frustum_ecc_paral,
+        generate_auger
     )
 except Exception as e:
     print("Error importing shapes:", e)
@@ -200,6 +203,18 @@ def generate_dxf():
             out = generate_rectangle_to_circle_ecc(params, msp=doc.modelspace(), layer="CUT")
             calc = out["calc"]
             response_data = calc  # ✅ now we attach the calc dict to response_data
+            
+        elif shape == "frustum_ecc_angle":
+            out = generate_frustum_ecc_angle(params, msp=doc.modelspace(), layer="CUT")
+            response_data = out["calc"]
+
+        elif shape == "frustum_ecc_paral":
+            out = generate_frustum_ecc_paral(params, msp=doc.modelspace(), layer="CUT")
+            response_data = out["calc"]
+
+        elif shape == "auger":
+            out = generate_auger(params, msp=doc.modelspace(), layer="CUT")
+            response_data = out["calc"]
 
         else:
             return jsonify({"error": f"Shape '{shape}' not supported"}), 400

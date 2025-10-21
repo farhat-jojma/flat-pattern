@@ -767,6 +767,7 @@ def generate_rectangle_to_circle(D, H, A, B, n):
 
     return {"dxf_base64": dxf_base64, "data": data}
 
+# 13. Rectangle to Circle Eccentric
 def generate_rectangle_to_circle_ecc(params, msp=None, layer="0"):
     """
     Rectangle -> Cercle excentré (développement)
@@ -973,3 +974,217 @@ def generate_rectangle_to_circle_ecc(params, msp=None, layer="0"):
     }
 
     return {"entities": entities, "calc": calc}
+
+# 14. Frustum Eccentric (Angle)
+def generate_frustum_ecc_angle(params, msp=None, layer="0"):
+    """
+    Frustum Eccentric (Angle)
+    Inputs:
+      D1, D2 : diameters (top/bottom)
+      H : height
+      X : eccentric offset (horizontal)
+      a : inclination angle (deg)
+      n : number of generators
+    Returns:
+      {
+        "calc": {"a":..., "b":..., "L1":..., "L2":..., ...},
+        "entities": [...]
+      }
+    """
+    D1 = float(params["D1"])
+    D2 = float(params["D2"])
+    H = float(params["H"])
+    X = float(params["X"])
+    # ✅ Accept both "a" and "alpha"
+    alpha = float(params.get("a", params.get("alpha", 0)))
+    n = int(params["n"])
+
+    R1 = D1 / 2
+    R2 = D2 / 2
+
+    # Half cone angle (in degrees)
+    a_angle = math.degrees(math.atan((R2 - R1) / H))
+    a = round(a_angle, 2)
+
+    # Calculate true lengths for each generator
+    L = []
+    for i in range(1, n + 1):
+        θ = math.pi * (i - 1) / (n - 1)
+        L_i = math.sqrt(H**2 + (R2 - R1 + X * math.cos(θ))**2)
+        L.append(round(L_i, 2))
+
+    # Average length for development sector
+    Lavg = sum(L) / len(L)
+    b_angle = 360 * R2 / Lavg
+    b = round(b_angle, 2)
+
+    # DXF drawing (flattened pattern)
+    entities = []
+    def add_line(p, q):
+        if msp is not None:
+            msp.add_line(p, q, dxfattribs={"layer": layer})
+        else:
+            entities.append(("LINE", p, q))
+
+    step = math.radians(b_angle) / (n - 1)
+    pts_top = []
+    pts_bot = []
+
+    for i in range(n):
+        ang = i * step
+        r_top = L[i] - (R2 - R1)
+        r_bot = L[i]
+        x1, y1 = r_top * math.cos(ang), r_top * math.sin(ang)
+        x2, y2 = r_bot * math.cos(ang), r_bot * math.sin(ang)
+        pts_top.append((x1, y1))
+        pts_bot.append((x2, y2))
+
+    # Connect arcs and generators
+    for i in range(n - 1):
+        add_line(pts_top[i], pts_top[i + 1])
+        add_line(pts_bot[i], pts_bot[i + 1])
+        add_line(pts_top[i], pts_bot[i])
+
+    calc = {"a": a, "b": b}
+    for i, Li in enumerate(L, start=1):
+        calc[f"L{i}"] = Li
+
+    return {"calc": calc, "entities": entities}
+
+# 15. Frustum Eccentric Parallel (Flat)
+def generate_frustum_ecc_paral(params, msp=None, layer="0"):
+    """
+    Frustum Eccentric Parallel (Flat pattern)
+    Inputs:
+      D1, D2 : diameters of top/bottom circles
+      H : vertical height
+      X : eccentric offset
+      n : number of generators
+    Returns:
+      {
+        "calc": {"a":..., "b":..., "L1":..., "L2":..., ...},
+        "entities": [...]
+      }
+    """
+
+    D1 = float(params["D1"])
+    D2 = float(params["D2"])
+    H = float(params["H"])
+    X = float(params["X"])
+    n = int(params["n"])
+
+    R1 = D1 / 2
+    R2 = D2 / 2
+
+    # ---- cone half-angle ----
+    a_angle = math.degrees(math.atan((R2 - R1) / H))
+    a = round(a_angle, 2)
+
+    # ---- compute generator lengths ----
+    L = []
+    for i in range(1, n + 1):
+        θ = math.pi * (i - 1) / (n - 1)
+        Li = math.sqrt(H**2 + (R2 - R1 + X * math.cos(θ))**2)
+        L.append(round(Li, 2))
+
+    # ---- sector angle ----
+    Lavg = sum(L) / len(L)
+    b_angle = 360 * R2 / Lavg
+    b = round(b_angle, 2)
+
+    # ---- DXF development ----
+    entities = []
+    def add_line(p, q):
+        if msp is not None:
+            msp.add_line(p, q, dxfattribs={"layer": layer})
+        else:
+            entities.append(("LINE", p, q))
+
+    # Divide the sector
+    step = math.radians(b_angle) / (n - 1)
+    pts_top = []
+    pts_bot = []
+
+    for i in range(n):
+        ang = i * step
+        r_top = L[i] - (R2 - R1)
+        r_bot = L[i]
+        x1, y1 = r_top * math.cos(ang), r_top * math.sin(ang)
+        x2, y2 = r_bot * math.cos(ang), r_bot * math.sin(ang)
+        pts_top.append((x1, y1))
+        pts_bot.append((x2, y2))
+
+    # Connect arcs + generators
+    for i in range(n - 1):
+        add_line(pts_top[i], pts_top[i + 1])
+        add_line(pts_bot[i], pts_bot[i + 1])
+        add_line(pts_top[i], pts_bot[i])
+
+    # ---- results ----
+    calc = {"a": a, "b": b}
+    for i, Li in enumerate(L, start=1):
+        calc[f"L{i}"] = Li
+
+    return {"calc": calc, "entities": entities}
+
+# 16. Auger (Helical Screw Flight)
+def generate_auger(params, msp=None, layer="CUT"):
+    """
+    Generate flat pattern for Auger (helical screw flight)
+    Inputs:
+      d : inner diameter (shaft)
+      D : outer diameter (flight)
+      S : pitch (distance between turns)
+    Returns:
+      {"calc": {...}, "entities": [...]}
+    """
+    d = float(params["d"])
+    D = float(params["D"])
+    S = float(params["S"])
+
+    r1 = d / 2
+    r2 = D / 2
+    rm = (r1 + r2) / 2
+
+    # true length of one turn
+    L = math.sqrt(S**2 + (2 * math.pi * rm)**2)
+
+    # developed sector angle
+    alpha = 360 * (2 * math.pi * rm) / L
+
+    # developed inner and outer radii
+    r = L * r1 / (2 * math.pi * rm)
+    R = L * r2 / (2 * math.pi * rm)
+
+    # arc length at mean radius
+    A = 2 * math.pi * rm * (alpha / 360)
+
+    # --- DXF Pattern (Annular sector) ---
+    entities = []
+    def add_line(p, q):
+        if msp is not None:
+            msp.add_line(p, q, dxfattribs={"layer": layer})
+        else:
+            entities.append(("LINE", p, q))
+
+    # Create arcs
+    steps = 60
+    angle_step = math.radians(alpha / steps)
+    outer_pts = [(R * math.cos(i * angle_step), R * math.sin(i * angle_step)) for i in range(steps + 1)]
+    inner_pts = [(r * math.cos(i * angle_step), r * math.sin(i * angle_step)) for i in reversed(range(steps + 1))]
+
+    poly = outer_pts + inner_pts + [outer_pts[0]]
+    if msp is not None:
+        msp.add_lwpolyline(poly, close=True, dxfattribs={"layer": layer})
+    else:
+        entities.append(("LWPOLYLINE", poly))
+
+    # --- Calculations output ---
+    calc = {
+        "A": round(A, 2),
+        "a": round(alpha, 2),
+        "r": round(r, 2),
+        "R": round(R, 2)
+    }
+
+    return {"calc": calc, "entities": entities}

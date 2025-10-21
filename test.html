@@ -28,6 +28,9 @@
         <option value="circle_to_rectangle">Circle to Rectangle</option>
         <option value="offset_cone">Offset Cone</option>
         <option value="sphere">Sphere</option>
+        <option value="frustum_ecc_angle">Frustum Eccentric (Angle)</option>
+        <option value="frustum_ecc_paral">Frustum Eccentric (Parallel)</option>
+        <option value="auger">Auger (Spiral Segment)</option>
       </select>
 
       <!-- Dynamic input fields -->
@@ -141,6 +144,9 @@
         circle_to_rectangle: ["D", "H", "A", "B", "n"],
         offset_cone: ["D", "H", "X", "n"],
         sphere: ["D", "N", "n"],
+        frustum_ecc_angle: ["D1", "D2", "H", "X", "a", "n"],
+        frustum_ecc_paral: ["D1", "D2", "H", "X", "n"],
+        auger: ["d", "D", "S"],
       };
 
       // Label mapping
@@ -152,6 +158,21 @@
         X: "X (Décalage horizontal, mm)",
         Y: "Y (Décalage vertical, mm)",
         n: "n (Nombre de génératrices)",
+        D1: "D1 (Diamètre supérieur, mm)",
+        D2: "D2 (Diamètre inférieur, mm)",
+        H: "H (Hauteur, mm)",
+        X: "X (Décalage horizontal, mm)",
+        a: "α (Angle, °)",
+        n: "n (Nombre de génératrices)",
+        D1: "D1 (Diamètre supérieur, mm)",
+        D2: "D2 (Diamètre inférieur, mm)",
+        H: "H (Hauteur, mm)",
+        X: "X (Décalage horizontal, mm)",
+        n: "n (Nombre de génératrices)",
+        d: "d (Diamètre intérieur, mm)",
+        D: "D (Diamètre extérieur, mm)",
+        S: "S (Pas, mm)",
+
       };
 
       shapeSelect.addEventListener("change", () => {
