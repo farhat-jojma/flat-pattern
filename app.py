@@ -18,7 +18,7 @@ try:
         generate_rectangle_to_rectangle,
         generate_flange,
         generate_truncated_cylinder,
-        generate_elbow,
+        generate_bend,
         generate_circle_to_rectangle,
         generate_offset_cone,
         generate_sphere,
@@ -35,6 +35,7 @@ try:
         generate_tee_on_cone,
         generate_pants,
         generate_pants2,
+        generate_pants_ecc
     )
 except Exception as e:
     print("Error importing shapes:", e)
@@ -143,8 +144,8 @@ def generate_dxf():
             )
             response_data = out.get("calc", out.get("data", out))
 
-        elif shape == "elbow":
-            out = generate_elbow(
+        elif shape == "bend":
+            out = generate_bend(
                 float(params["R"]),
                 float(params["alpha"]),
                 float(params["D"]),
@@ -236,6 +237,10 @@ def generate_dxf():
 
         elif shape == "pants2":
             out = generate_pants2(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+
+        elif shape == "pants_ecc":
+            out = generate_pants_ecc(params, msp=msp, layer="CUT")
             response_data = out["calc"]
 
         else:

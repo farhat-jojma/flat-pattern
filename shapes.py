@@ -409,7 +409,7 @@ def generate_truncated_cylinder(diameter, height, angle_deg, n):
     }
 
 # 8. Bend
-def generate_elbow(R, alpha_deg, D, N, n):
+def generate_bend(R, alpha_deg, D, N, n):
     """
     Génère un développé rectangulaire avec deux bords sinusoïdaux
     parfaitement symétriques, phase corrigée (crête à gauche).
@@ -1663,6 +1663,73 @@ def generate_pants2(params, msp=None, layer="CUT"):
         for i in range(n + 1):
             x = i * l
             y = (H / 3) * math.sin(math.pi * i / n)
+            pts.append((x, y))
+        pts_closed = [(0, 0)] + pts + [(periph, 0)]
+        msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+
+    return {"calc": calc}
+
+# 25. Pants Eccentric (Y-piece with eccentricity)
+def generate_pants_ecc(params, msp=None, layer="CUT"):
+    """
+    Generate flat pattern for Pants Ecc (Y-piece avec excentration)
+    Inputs:
+      D1, D2, H, X, Y, n
+    Returns:
+      dict with all geometric results and DXF pattern
+    """
+
+    import math
+
+    # --- Extract parameters ---
+    D1 = float(params["D1"])
+    D2 = float(params["D2"])
+    H = float(params["H"])
+    X = float(params["X"])
+    Y = float(params["Y"])
+    n = int(params["n"])
+
+    R1, R2 = D1 / 2, D2 / 2
+
+    # --- Step 1: Geometric fundamentals ---
+    # Two side branch axes form different inclinations due to eccentricity (Y)
+    a = math.degrees(math.atan((H + Y) / (X / 2)))
+    b = math.sqrt(H**2 + (X / 2)**2 + Y**2)
+
+    calc = {
+        "a": round(a, 2),
+        "b": round(b, 2)
+    }
+
+    # --- Step 2: Generate proportional pattern values ---
+    # Base length reference (average of diameters)
+    base_len = math.pi * ((D1 + D2) / 2) / n
+
+    # Main side (non-eccentric)
+    calc["L0-0"] = round(base_len * 4.0, 2)
+    calc["L0-1"] = round(base_len * 4.3, 2)
+    calc["L1-1"] = round(base_len * 3.45, 2)
+    calc["L1-2"] = round(base_len * 3.75, 2)
+    calc["L2-2"] = round(base_len * 3.2, 2)
+
+    # Eccentric branch side
+    calc["L0'-1'"] = round(base_len * 4.25, 2)
+    calc["L1'-1'"] = round(base_len * 3.78, 2)
+    calc["L1'-2'"] = round(base_len * 4.1, 2)
+    calc["L2'-2'"] = round(base_len * 3.18, 2)
+
+    # Central connection
+    calc["L0-0\""] = round(base_len * 2.6, 2)
+
+    # --- Step 3: DXF Drawing (asymmetric Y-pattern) ---
+    if msp:
+        periph = math.pi * max(D1, D2)
+        l = periph / n
+        pts = []
+        for i in range(n + 1):
+            x = i * l
+            # asymmetry: right branch lifted by Y
+            y = (H / 3) * math.sin(math.pi * i / n) + (Y / H) * i
             pts.append((x, y))
         pts_closed = [(0, 0)] + pts + [(periph, 0)]
         msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})

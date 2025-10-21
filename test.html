@@ -24,7 +24,7 @@
         <option value="rectangle_to_circle_ecc">Rectangle to Circle Eccentric</option>
         <option value="flange">Flange</option>
         <option value="truncated_cylinder">Truncated Cylinder</option>
-        <option value="elbow">Pipe Elbow</option>
+        <option value="bend">Pipe bend</option>
         <option value="circle_to_rectangle">Circle to Rectangle</option>
         <option value="offset_cone">Offset Cone</option>
         <option value="sphere">Sphere</option>
@@ -38,6 +38,7 @@
         <option value="tee_on_cone">Tee on Cone</option>
         <option value="pants">Pants</option>
         <option value="pants2">Pants 2 (3-Branch)</option>
+        <option value="pants_ecc">Pants Ecc (Y-piece avec excentration)</option>
       </select>
 
       <!-- Dynamic input fields -->
@@ -130,18 +131,25 @@
         H: 200,
         X: 50,
         n: 6,
+        D1: 100,
+        D2: 200,
+        H: 200,
+        X: 60,
+        Y: 30,
+        n: 6,
       };
 
       // Shape fields
       const shapeFields = {
         cone: ["diameter", "height"],
+        frustum_cone: ["D1", "D2", "L"],
         pyramid: ["AA", "AB", "H"],
         rectangle_to_rectangle: ["ab", "bc", "H", "AB", "BC"],
         rectangle_to_circle: ["D", "H", "A", "B", "n"],
         rectangle_to_circle_ecc: ["D", "H", "A", "B", "X", "Y", "n"],
         flange: ["D1", "D2", "D3", "D4", "N1", "d1", "N2", "d2"],
         truncated_cylinder: ["diameter", "height", "angle", "n"],
-        elbow: ["R", "alpha", "D", "N", "n"],
+        bend: ["R", "alpha", "D", "N", "n"],
         circle_to_rectangle: ["D", "H", "A", "B", "n"],
         offset_cone: ["D", "H", "X", "n"],
         sphere: ["D", "N", "n"],
@@ -155,6 +163,8 @@
         tee_on_cone: ["D1", "D2", "L", "A", "d", "H", "X", "n"],
         pants: ["D1", "D2", "H", "X", "n"],
         pants2: ["D1", "D2", "H", "X", "a", "n"],
+        pants_ecc: ["D1", "D2", "H", "X", "Y", "n"],
+
       };
 
       // Labels
@@ -180,6 +190,16 @@
         H: "H (Hauteur, mm)",
         X: "X (Entraxe, mm)",
         n: "n (Nombre de génératrices)",
+        D1: "D1 (Diamètre branche, mm)",
+        D2: "D2 (Diamètre principal, mm)",
+        H: "H (Hauteur, mm)",
+        X: "X (Entraxe, mm)",
+        Y: "Y (Décalage vertical, mm)",
+        n: "n (Nombre de génératrices)",
+        d1: "d1 (Diamètre des trous 1, mm)",
+        d2: "d2 (Diamètre des trous 2, mm)",
+        
+
       };
 
       // Generate input fields dynamically
@@ -226,7 +246,7 @@
         resultsDiv.classList.add("hidden");
 
         try {
-          const res = await fetch("http://127.0.0.1:5000/generate_dxf", {
+          const res = await fetch("https://flat-pattern.onrender.com/generate_dxf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
