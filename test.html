@@ -21,7 +21,7 @@
         <option value="pyramid">Pyramid</option>
         <option value="rectangle_to_rectangle">Rectangle to Rectangle</option>
         <option value="rectangle_to_circle">Rectangle to Circle</option>
-        <option value="rectangle_to_circle_ecc">Rectangle to Circle Eccentric</option> <!-- ✅ NEW -->
+        <option value="rectangle_to_circle_ecc">Rectangle to Circle Eccentric</option>
         <option value="flange">Flange</option>
         <option value="truncated_cylinder">Truncated Cylinder</option>
         <option value="elbow">Pipe Elbow</option>
@@ -31,6 +31,13 @@
         <option value="frustum_ecc_angle">Frustum Eccentric (Angle)</option>
         <option value="frustum_ecc_paral">Frustum Eccentric (Parallel)</option>
         <option value="auger">Auger (Spiral Segment)</option>
+        <option value="breeches_full">Breeches (2-Branch)</option>
+        <option value="offset_tee">Offset Tee</option>
+        <option value="tee_oblique">Tee Oblique (Y-Tee)</option>
+        <option value="tee_on_bend">Tee on Bend</option>
+        <option value="tee_on_cone">Tee on Cone</option>
+        <option value="pants">Pants</option>
+        <option value="pants2">Pants 2 (3-Branch)</option>
       </select>
 
       <!-- Dynamic input fields -->
@@ -99,36 +106,30 @@
 
       // Default values
       const defaultValues = {
-        diameter: 200,
-        height: 100,
-        angle: 20,
-        n: 4,
-        diameter1: 300,
-        diameter2: 150,
-        beta: 120,
-        AA: 200,
-        AB: 150,
-        H: 300,
-        ab: 200,
-        bc: 150,
-        AB: 400,
-        BC: 300,
-        D1: 50,
-        D2: 80,
-        D3: 120,
-        D4: 150,
-        N1: 6,
-        d1: 8,
-        N2: 4,
-        d2: 12,
-        R: 200,
-        alpha: 90,
         D: 200,
-        N: 12,
+        D1: 150,     // 👈 added
+        D2: 100,     // 👈 added
+        d: 80,
+        L: 200,
+        L1: 200,
+        L2: 150,
+        A: 50,       // 👈 added
         X: 50,
-        Y: 30,
-        A: 400,
-        B: 300,
+        R: 100,
+        H: 150,
+        a: 30,
+        n: 12,
+        D1: 100,
+        D2: 200,
+        H: 200,
+        X: 50,
+        n: 6,
+        D1: 100,
+        D2: 100,
+        D3: 120,
+        H: 200,
+        X: 50,
+        n: 6,
       };
 
       // Shape fields
@@ -137,7 +138,7 @@
         pyramid: ["AA", "AB", "H"],
         rectangle_to_rectangle: ["ab", "bc", "H", "AB", "BC"],
         rectangle_to_circle: ["D", "H", "A", "B", "n"],
-        rectangle_to_circle_ecc: ["D", "H", "A", "B", "X", "Y", "n"], // ✅ NEW
+        rectangle_to_circle_ecc: ["D", "H", "A", "B", "X", "Y", "n"],
         flange: ["D1", "D2", "D3", "D4", "N1", "d1", "N2", "d2"],
         truncated_cylinder: ["diameter", "height", "angle", "n"],
         elbow: ["R", "alpha", "D", "N", "n"],
@@ -147,34 +148,41 @@
         frustum_ecc_angle: ["D1", "D2", "H", "X", "a", "n"],
         frustum_ecc_paral: ["D1", "D2", "H", "X", "n"],
         auger: ["d", "D", "S"],
+        breeches_full: ["D", "L1", "L2", "a", "n"],
+        offset_tee: ["D", "d", "L", "X", "a", "n"],
+        tee_oblique: ["L1", "D", "d", "a", "n"],
+        tee_on_bend: ["D", "d", "R", "H", "n"],
+        tee_on_cone: ["D1", "D2", "L", "A", "d", "H", "X", "n"],
+        pants: ["D1", "D2", "H", "X", "n"],
+        pants2: ["D1", "D2", "H", "X", "a", "n"],
       };
 
-      // Label mapping
+      // Labels
       const labelMap = {
-        D: "D (Diamètre du cercle, mm)",
-        H: "H (Hauteur, mm)",
-        A: "A (Longueur du rectangle, mm)",
-        B: "B (Largeur du rectangle, mm)",
-        X: "X (Décalage horizontal, mm)",
-        Y: "Y (Décalage vertical, mm)",
-        n: "n (Nombre de génératrices)",
-        D1: "D1 (Diamètre supérieur, mm)",
-        D2: "D2 (Diamètre inférieur, mm)",
-        H: "H (Hauteur, mm)",
-        X: "X (Décalage horizontal, mm)",
-        a: "α (Angle, °)",
-        n: "n (Nombre de génératrices)",
-        D1: "D1 (Diamètre supérieur, mm)",
-        D2: "D2 (Diamètre inférieur, mm)",
-        H: "H (Hauteur, mm)",
+        D: "D (Diamètre principal, mm)",
+        D1: "D1 (Diamètre base du cône, mm)",
+        D2: "D2 (Diamètre supérieur du cône, mm)",
+        d: "d (Diamètre de la buse, mm)",
+        L: "L (Longueur du cône, mm)",
+        A: "A (Distance axiale, mm)",
+        R: "R (Rayon du coude, mm)",
+        H: "H (Hauteur de la buse, mm)",
         X: "X (Décalage horizontal, mm)",
         n: "n (Nombre de génératrices)",
-        d: "d (Diamètre intérieur, mm)",
-        D: "D (Diamètre extérieur, mm)",
-        S: "S (Pas, mm)",
-
+        D1: "D1 (Diamètre du haut, mm)",
+        D2: "D2 (Diamètre de base, mm)",
+        H: "H (Hauteur, mm)",
+        X: "X (Entraxe, mm)",
+        n: "n (Nombre de génératrices)",
+        D1: "D1 (Branche gauche, mm)",
+        D2: "D2 (Branche droite, mm)",
+        D3: "D3 (Branche centrale, mm)",
+        H: "H (Hauteur, mm)",
+        X: "X (Entraxe, mm)",
+        n: "n (Nombre de génératrices)",
       };
 
+      // Generate input fields dynamically
       shapeSelect.addEventListener("change", () => {
         const shape = shapeSelect.value;
         fieldsDiv.innerHTML = "";
@@ -184,7 +192,7 @@
           shapeFields[shape].forEach((f) => {
             const label = document.createElement("label");
             label.className = "block mt-2 font-medium";
-            label.textContent = labelMap[f] || `${f} ${f === "angle" ? "(°)" : "(mm)"}`;
+            label.textContent = labelMap[f] || f;
 
             const input = document.createElement("input");
             input.type = "number";
@@ -198,6 +206,7 @@
         }
       });
 
+      // Generate DXF
       async function generateDXF() {
         const shape = shapeSelect.value;
         if (!shape) return alert("Please select a shape!");
@@ -228,12 +237,11 @@
           console.log("✅ Response:", json);
 
           calcList.innerHTML = "";
-          if (json.data) {
-            for (const [k, v] of Object.entries(json.data)) {
-              const li = document.createElement("li");
-              li.innerHTML = `<strong>${k}</strong>: ${v}`;
-              calcList.appendChild(li);
-            }
+          const data = json.data || json;
+          for (const [k, v] of Object.entries(data)) {
+            const li = document.createElement("li");
+            li.innerHTML = `<strong>${k}</strong>: ${v}`;
+            calcList.appendChild(li);
           }
 
           resultsDiv.classList.remove("hidden");
@@ -246,12 +254,11 @@
         }
       }
 
+      // Download DXF
       downloadBtn.addEventListener("click", () => {
         if (!lastDXFBase64) return alert("No DXF available yet!");
         const byteChars = atob(lastDXFBase64);
-        const byteNumbers = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-        const byteArray = new Uint8Array(byteNumbers);
+        const byteArray = new Uint8Array([...byteChars].map((c) => c.charCodeAt(0)));
         const blob = new Blob([byteArray], { type: "application/dxf" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");

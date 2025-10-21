@@ -26,7 +26,15 @@ try:
         generate_rectangle_to_circle_ecc,
         generate_frustum_ecc_angle,
         generate_frustum_ecc_paral,
-        generate_auger
+        generate_auger,
+        generate_breeches_full,
+        generate_offset_tee,
+        generate_tee_oblique,
+        generate_tee_eccentric,
+        generate_tee_on_bend,
+        generate_tee_on_cone,
+        generate_pants,
+        generate_pants2,
     )
 except Exception as e:
     print("Error importing shapes:", e)
@@ -36,7 +44,6 @@ sys.stdout.flush()
 
 app = Flask(__name__)
 CORS(app)
-
 
 @app.route("/")
 def home():
@@ -65,179 +72,195 @@ def generate_dxf():
         # Create DXF document
         doc = ezdxf.new()
         msp = doc.modelspace()
-        result = {}
-        response_data = {}  # ✅ add default empty response container
+        response_data = {}
 
         # ---------------------- SHAPES ----------------------
 
         if shape == "cone":
-            result = generate_cone(float(params["diameter"]), float(params["height"]))
-            msp.add_lwpolyline(result["points"], close=True)
+            res = generate_cone(float(params["diameter"]), float(params["height"]))
+            msp.add_lwpolyline(res["points"], close=True)
+            response_data = res.get("data", {})
 
         elif shape == "frustum_cone":
             d1 = float(params["diameter1"])
             d2 = float(params["diameter2"])
-            if "height" in params:
-                value = float(params["height"])
-                mode = "H"
-            elif "beta" in params:
-                value = float(params["beta"])
-                mode = "B"
-            else:
-                return jsonify({"error": "Missing height or beta parameter"}), 400
-            result = generate_frustum_cone(d1, d2, value, mode)
-            msp.add_lwpolyline(result["points"], close=True)
+            value = float(params.get("height") or params.get("beta"))
+            mode = "H" if "height" in params else "B"
+            res = generate_frustum_cone(d1, d2, value, mode)
+            msp.add_lwpolyline(res["points"], close=True)
+            response_data = res.get("data", {})
 
         elif shape == "frustum_cone_triangulation":
             d1 = float(params["diameter1"])
             d2 = float(params["diameter2"])
-            if "height" in params:
-                value = float(params["height"])
-                mode = "H"
-            elif "beta" in params:
-                value = float(params["beta"])
-                mode = "B"
-            else:
-                return jsonify({"error": "Missing height or beta parameter"}), 400
+            value = float(params.get("height") or params.get("beta"))
+            mode = "H" if "height" in params else "B"
             n = int(params.get("n", 12))
-            result = generate_frustum_cone_triangulation(d1, d2, value, mode, n)
-            msp.add_lwpolyline(result["points"], close=True)
-            for line in result["generators"]:
+            res = generate_frustum_cone_triangulation(d1, d2, value, mode, n)
+            msp.add_lwpolyline(res["points"], close=True)
+            for line in res["generators"]:
                 msp.add_line(line[0], line[1])
+            response_data = res.get("data", {})
 
         elif shape == "pyramid":
-            AA = float(params["AA"])
-            AB = float(params["AB"])
-            H = float(params["H"])
-            result = generate_pyramid(AA, AB, H)
-            for face in result["faces"]:
+            AA, AB, H = float(params["AA"]), float(params["AB"]), float(params["H"])
+            res = generate_pyramid(AA, AB, H)
+            for face in res["faces"]:
                 msp.add_lwpolyline(face, close=True)
-            response_data = result["data"]
+            response_data = res["data"]
 
         elif shape == "rectangle_to_rectangle":
-            ab = float(params["ab"])
-            bc = float(params["bc"])
-            H = float(params["H"])
-            AB = float(params["AB"])
-            BC = float(params["BC"])
-            result = generate_rectangle_to_rectangle(ab, bc, H, AB, BC)
-            for face in result["faces"]:
+            res = generate_rectangle_to_rectangle(
+                float(params["ab"]), float(params["bc"]), float(params["H"]),
+                float(params["AB"]), float(params["BC"])
+            )
+            for face in res["faces"]:
                 msp.add_lwpolyline(face, close=True)
-            response_data = result["data"]
+            response_data = res["data"]
 
         elif shape == "flange":
-            result = generate_flange(
-                float(params["D1"]),
-                float(params["D2"]),
-                float(params["D3"]),
-                float(params["D4"]),
-                int(params["N1"]),
-                float(params["d1"]),
-                int(params["N2"]),
-                float(params["d2"]),
+            res = generate_flange(
+                float(params["D1"]), float(params["D2"]),
+                float(params["D3"]), float(params["D4"]),
+                int(params["N1"]), float(params["d1"]),
+                int(params["N2"]), float(params["d2"]),
             )
-            for etype, center, radius in result["entities"]:
+            for etype, center, radius in res["entities"]:
                 x, y = center
-                if etype in ("cut", "hole"):
-                    steps = 90
-                    pts = [(x + radius * math.cos(2 * math.pi * i / steps),
-                            y + radius * math.sin(2 * math.pi * i / steps))
-                           for i in range(steps + 1)]
-                    msp.add_lwpolyline(pts, close=True)
-            response_data = result["data"]
+                steps = 90
+                pts = [(x + radius * math.cos(2 * math.pi * i / steps),
+                        y + radius * math.sin(2 * math.pi * i / steps))
+                       for i in range(steps + 1)]
+                msp.add_lwpolyline(pts, close=True)
+            response_data = res["data"]
 
         elif shape == "truncated_cylinder":
-            result = generate_truncated_cylinder(
+            out = generate_truncated_cylinder(
                 float(params["diameter"]),
                 float(params["height"]),
                 float(params["angle"]),
                 int(params["n"])
             )
-            return jsonify(result)
+            response_data = out.get("calc", out.get("data", out))
 
         elif shape == "elbow":
-            R = float(params["R"])
-            alpha = float(params["alpha"])
-            D = float(params["D"])
-            N = int(params["N"])
-            n = int(params["n"])
-            result = generate_elbow(R, alpha, D, N, n)
-            return jsonify(result)
+            out = generate_elbow(
+                float(params["R"]),
+                float(params["alpha"]),
+                float(params["D"]),
+                int(params["N"]),
+                int(params["n"]),
+            )
+            response_data = out.get("calc", out.get("data", out))
 
         elif shape == "circle_to_rectangle":
-            D = float(params["D"])
-            H = float(params["H"])
-            A = float(params["A"])
-            B = float(params["B"])
-            n = int(params["n"])
-            result = generate_circle_to_rectangle(D, H, A, B, n)
-            return jsonify(result)
+            out = generate_circle_to_rectangle(
+                float(params["D"]),
+                float(params["H"]),
+                float(params["A"]),
+                float(params["B"]),
+                int(params["n"])
+            )
+            response_data = out.get("calc", out.get("data", out))
 
         elif shape == "offset_cone":
-            result = generate_offset_cone(
+            out = generate_offset_cone(
                 float(params["D"]),
                 float(params["H"]),
                 float(params["X"]),
                 int(params["n"])
             )
-            return jsonify(result)
+            response_data = out.get("calc", out.get("data", out))
 
         elif shape == "sphere":
-            result = generate_sphere(
+            out = generate_sphere(
                 float(params["D"]),
                 int(params["N"]),
                 int(params["n"])
             )
-            return jsonify(result)
+            response_data = out.get("calc", out.get("data", out))
 
         elif shape == "rectangle_to_circle":
-            D = float(params["D"])
-            H = float(params["H"])
-            A = float(params["A"])
-            B = float(params["B"])
-            n = int(params["n"])
-            result = generate_rectangle_to_circle(D, H, A, B, n)
-            return jsonify(result)
+            out = generate_rectangle_to_circle(
+                float(params["D"]),
+                float(params["H"]),
+                float(params["A"]),
+                float(params["B"]),
+                int(params["n"])
+            )
+            response_data = out.get("calc", out.get("data", out))
 
         elif shape == "rectangle_to_circle_ecc":
-            out = generate_rectangle_to_circle_ecc(params, msp=doc.modelspace(), layer="CUT")
-            calc = out["calc"]
-            response_data = calc  # ✅ now we attach the calc dict to response_data
-            
+            out = generate_rectangle_to_circle_ecc(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+
         elif shape == "frustum_ecc_angle":
-            out = generate_frustum_ecc_angle(params, msp=doc.modelspace(), layer="CUT")
+            out = generate_frustum_ecc_angle(params, msp=msp, layer="CUT")
             response_data = out["calc"]
 
         elif shape == "frustum_ecc_paral":
-            out = generate_frustum_ecc_paral(params, msp=doc.modelspace(), layer="CUT")
+            out = generate_frustum_ecc_paral(params, msp=msp, layer="CUT")
             response_data = out["calc"]
 
         elif shape == "auger":
-            out = generate_auger(params, msp=doc.modelspace(), layer="CUT")
+            out = generate_auger(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+
+        elif shape == "breeches_full":
+            out = generate_breeches_full(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+        
+        elif shape == "offset_tee":
+            out = generate_offset_tee(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+            
+        elif shape == "tee_oblique":
+            out = generate_tee_oblique(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+
+        elif shape == "tee_eccentric":
+            out = generate_tee_eccentric(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+        
+        elif shape == "tee_on_bend":
+            out = generate_tee_on_bend(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+
+        elif shape == "tee_on_cone":
+            out = generate_tee_on_cone(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+            
+        elif shape == "pants":
+            out = generate_pants(params, msp=msp, layer="CUT")
+            response_data = out["calc"]
+
+        elif shape == "pants2":
+            out = generate_pants2(params, msp=msp, layer="CUT")
             response_data = out["calc"]
 
         else:
             return jsonify({"error": f"Shape '{shape}' not supported"}), 400
 
-        # ---------------------- DXF EXPORT ----------------------
+                # ---------------------- DXF EXPORT ----------------------
         try:
-            text_buffer = io.StringIO()
-            doc.write(text_buffer)
-            dxf_data = text_buffer.getvalue().encode("utf-8")
-            dxf_base64 = base64.b64encode(dxf_data).decode("utf-8")
+            import io
+            from io import StringIO
+
+            buf = StringIO()
+            doc.write(buf)  # write DXF to memory as text
+            dxf_str = buf.getvalue().encode("utf-8")
+            dxf_base64 = base64.b64encode(dxf_str).decode("utf-8")
         except Exception as e:
             print("Error writing DXF:", e)
             traceback.print_exc()
             return jsonify({"error": f"DXF write failed: {str(e)}"}), 500
 
-        # ✅ Unified JSON response with data + DXF
-        response_json = {
+        # ✅ Unified JSON response
+        return jsonify({
             "shape": shape,
-            "dxf_base64": dxf_base64,
-            "data": response_data  # ✅ ensures calculated values appear in test.html
-        }
-
-        return jsonify(response_json)
+            "data": response_data,
+            "dxf_base64": dxf_base64
+        })
 
     except Exception as e:
         print("Error:", e, file=sys.stderr)
