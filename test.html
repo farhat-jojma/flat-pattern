@@ -6,6 +6,7 @@
     <title>DXF Generator Test</title>
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
+
   <body class="bg-gray-100 min-h-screen flex items-center justify-center">
     <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-lg relative">
       <h1 class="text-2xl font-bold mb-4 text-center">DXF Generator Test</h1>
@@ -19,18 +20,25 @@
         <option value="frustum_cone_triangulation">Frustum Cone (Triangulation)</option>
         <option value="pyramid">Pyramid</option>
         <option value="rectangle_to_rectangle">Rectangle to Rectangle</option>
+        <option value="rectangle_to_circle">Rectangle to Circle</option>
+        <option value="rectangle_to_circle_ecc">Rectangle to Circle Eccentric</option> <!-- ✅ NEW -->
         <option value="flange">Flange</option>
         <option value="truncated_cylinder">Truncated Cylinder</option>
-        <option value="bend">Simple Bend</option>
-        <option value="elbow">Pipe Elbow (Flat Pattern)</option>
+        <option value="elbow">Pipe Elbow</option>
+        <option value="circle_to_rectangle">Circle to Rectangle</option>
+        <option value="offset_cone">Offset Cone</option>
+        <option value="sphere">Sphere</option>
       </select>
 
       <!-- Dynamic input fields -->
       <div id="fields"></div>
 
       <!-- Submit button -->
-      <button id="generateBtn" onclick="generateDXF()" 
-        class="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+      <button
+        id="generateBtn"
+        onclick="generateDXF()"
+        class="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
+      >
         Generate DXF
       </button>
 
@@ -38,17 +46,39 @@
       <div id="results" class="mt-6 hidden border-t pt-4 text-gray-700">
         <h2 class="font-semibold text-lg mb-2">📊 Calculated Values</h2>
         <ul id="calcList" class="list-disc ml-6 space-y-1"></ul>
-        <button id="downloadBtn" class="mt-4 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">
+        <button
+          id="downloadBtn"
+          class="mt-4 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+        >
           Download DXF
         </button>
       </div>
 
       <!-- Loading overlay -->
-      <div id="loading" class="hidden absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl">
+      <div
+        id="loading"
+        class="hidden absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl"
+      >
         <div class="flex flex-col items-center">
-          <svg class="animate-spin h-8 w-8 text-blue-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l3 3-3 3v-4a8 8 0 01-8-8z"></path>
+          <svg
+            class="animate-spin h-8 w-8 text-blue-600 mb-2"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l3 3-3 3v-4a8 8 0 01-8-8z"
+            ></path>
           </svg>
           <p class="text-blue-700 font-semibold">Generating DXF...</p>
         </div>
@@ -64,7 +94,7 @@
       const downloadBtn = document.getElementById("downloadBtn");
       let lastDXFBase64 = null;
 
-      // Default values for quick testing
+      // Default values
       const defaultValues = {
         diameter: 200,
         height: 100,
@@ -88,32 +118,40 @@
         d1: 8,
         N2: 4,
         d2: 12,
-        // 👇 elbow defaults
         R: 200,
         alpha: 90,
-        D: 100,
-        N: 4,
-        n: 4
+        D: 200,
+        N: 12,
+        X: 50,
+        Y: 30,
+        A: 400,
+        B: 300,
       };
 
-      // Define fields per shape
+      // Shape fields
       const shapeFields = {
         cone: ["diameter", "height"],
         pyramid: ["AA", "AB", "H"],
         rectangle_to_rectangle: ["ab", "bc", "H", "AB", "BC"],
+        rectangle_to_circle: ["D", "H", "A", "B", "n"],
+        rectangle_to_circle_ecc: ["D", "H", "A", "B", "X", "Y", "n"], // ✅ NEW
         flange: ["D1", "D2", "D3", "D4", "N1", "d1", "N2", "d2"],
         truncated_cylinder: ["diameter", "height", "angle", "n"],
-        bend: ["diameter", "bend_angle", "radius", "divisions"],
-        elbow: ["R", "alpha", "D", "N", "n"]
+        elbow: ["R", "alpha", "D", "N", "n"],
+        circle_to_rectangle: ["D", "H", "A", "B", "n"],
+        offset_cone: ["D", "H", "X", "n"],
+        sphere: ["D", "N", "n"],
       };
 
-      // Label translations for elbow clarity
+      // Label mapping
       const labelMap = {
-        R: "R (Rayon de courbure, mm)",
-        alpha: "α (Angle de courbure, °)",
-        D: "D (Diamètre du tuyau, mm)",
-        N: "N (Nombre de secteurs)",
-        n: "n (Nombre de génératrices)"
+        D: "D (Diamètre du cercle, mm)",
+        H: "H (Hauteur, mm)",
+        A: "A (Longueur du rectangle, mm)",
+        B: "B (Largeur du rectangle, mm)",
+        X: "X (Décalage horizontal, mm)",
+        Y: "Y (Décalage vertical, mm)",
+        n: "n (Nombre de génératrices)",
       };
 
       shapeSelect.addEventListener("change", () => {
@@ -122,7 +160,7 @@
         resultsDiv.classList.add("hidden");
 
         if (shape && shapeFields[shape]) {
-          shapeFields[shape].forEach(f => {
+          shapeFields[shape].forEach((f) => {
             const label = document.createElement("label");
             label.className = "block mt-2 font-medium";
             label.textContent = labelMap[f] || `${f} ${f === "angle" ? "(°)" : "(mm)"}`;
@@ -141,33 +179,30 @@
 
       async function generateDXF() {
         const shape = shapeSelect.value;
-        if (!shape) {
-          alert("Please select a shape!");
-          return;
-        }
+        if (!shape) return alert("Please select a shape!");
 
         const params = {};
         if (shapeFields[shape]) {
-          shapeFields[shape].forEach(f => {
+          shapeFields[shape].forEach((f) => {
             const val = parseFloat(document.getElementById(f).value);
             if (!isNaN(val)) params[f] = val;
           });
         }
 
         const payload = { shape, params };
-        console.log("🟦 Payload sent:", payload);
+        console.log("🟦 Payload:", payload);
 
         loadingOverlay.classList.remove("hidden");
         resultsDiv.classList.add("hidden");
 
         try {
-          const res = await fetch("https://flat-pattern-production.up.railway.app/generate_dxf", {
+          const res = await fetch("http://127.0.0.1:5000/generate_dxf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
           });
-
           if (!res.ok) throw new Error("Error generating DXF");
+
           const json = await res.json();
           console.log("✅ Response:", json);
 
@@ -175,14 +210,7 @@
           if (json.data) {
             for (const [k, v] of Object.entries(json.data)) {
               const li = document.createElement("li");
-              if (Array.isArray(v)) {
-                // if it's an array (like h_values), format nicely
-                li.innerHTML = `<strong>${k}</strong>: ${v
-                  .map((num, i) => `h${i + 1} = ${num}`)
-                  .join(", ")}`;
-              } else {
-                li.innerHTML = `<strong>${k}</strong>: ${v}`;
-              }
+              li.innerHTML = `<strong>${k}</strong>: ${v}`;
               calcList.appendChild(li);
             }
           }

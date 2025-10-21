@@ -18,7 +18,12 @@ try:
         generate_rectangle_to_rectangle,
         generate_flange,
         generate_truncated_cylinder,
-        generate_elbow  # ✅ new
+        generate_elbow,
+        generate_circle_to_rectangle,
+        generate_offset_cone,
+        generate_sphere,
+        generate_rectangle_to_circle,
+        generate_rectangle_to_circle_ecc
     )
 except Exception as e:
     print("Error importing shapes:", e)
@@ -58,14 +63,12 @@ def generate_dxf():
         doc = ezdxf.new()
         msp = doc.modelspace()
         result = {}
+        response_data = {}  # ✅ add default empty response container
 
         # ---------------------- SHAPES ----------------------
 
         if shape == "cone":
-            result = generate_cone(
-                float(params["diameter"]),
-                float(params["height"])
-            )
+            result = generate_cone(float(params["diameter"]), float(params["height"]))
             msp.add_lwpolyline(result["points"], close=True)
 
         elif shape == "frustum_cone":
@@ -79,14 +82,12 @@ def generate_dxf():
                 mode = "B"
             else:
                 return jsonify({"error": "Missing height or beta parameter"}), 400
-
             result = generate_frustum_cone(d1, d2, value, mode)
             msp.add_lwpolyline(result["points"], close=True)
 
         elif shape == "frustum_cone_triangulation":
             d1 = float(params["diameter1"])
             d2 = float(params["diameter2"])
-
             if "height" in params:
                 value = float(params["height"])
                 mode = "H"
@@ -95,27 +96,19 @@ def generate_dxf():
                 mode = "B"
             else:
                 return jsonify({"error": "Missing height or beta parameter"}), 400
-
             n = int(params.get("n", 12))
-
             result = generate_frustum_cone_triangulation(d1, d2, value, mode, n)
-
-            # Draw main outline
             msp.add_lwpolyline(result["points"], close=True)
-
-            # Draw internal generator lines
             for line in result["generators"]:
                 msp.add_line(line[0], line[1])
-                
+
         elif shape == "pyramid":
             AA = float(params["AA"])
             AB = float(params["AB"])
             H = float(params["H"])
-
             result = generate_pyramid(AA, AB, H)
             for face in result["faces"]:
                 msp.add_lwpolyline(face, close=True)
-
             response_data = result["data"]
 
         elif shape == "rectangle_to_rectangle":
@@ -124,14 +117,9 @@ def generate_dxf():
             H = float(params["H"])
             AB = float(params["AB"])
             BC = float(params["BC"])
-
             result = generate_rectangle_to_rectangle(ab, bc, H, AB, BC)
-            
-            # Draw all unfolded faces
             for face in result["faces"]:
                 msp.add_lwpolyline(face, close=True)
-
-            # Return the calculated data
             response_data = result["data"]
 
         elif shape == "flange":
@@ -145,17 +133,14 @@ def generate_dxf():
                 int(params["N2"]),
                 float(params["d2"]),
             )
-
             for etype, center, radius in result["entities"]:
                 x, y = center
                 if etype in ("cut", "hole"):
-                    # Draw with LWPolyline — clean path, no center mark
                     steps = 90
-                    pts = [(x + radius * math.cos(2*math.pi*i/steps),
-                            y + radius * math.sin(2*math.pi*i/steps))
-                        for i in range(steps+1)]
+                    pts = [(x + radius * math.cos(2 * math.pi * i / steps),
+                            y + radius * math.sin(2 * math.pi * i / steps))
+                           for i in range(steps + 1)]
                     msp.add_lwpolyline(pts, close=True)
-
             response_data = result["data"]
 
         elif shape == "truncated_cylinder":
@@ -166,7 +151,7 @@ def generate_dxf():
                 int(params["n"])
             )
             return jsonify(result)
-        
+
         elif shape == "elbow":
             R = float(params["R"])
             alpha = float(params["alpha"])
@@ -176,28 +161,68 @@ def generate_dxf():
             result = generate_elbow(R, alpha, D, N, n)
             return jsonify(result)
 
+        elif shape == "circle_to_rectangle":
+            D = float(params["D"])
+            H = float(params["H"])
+            A = float(params["A"])
+            B = float(params["B"])
+            n = int(params["n"])
+            result = generate_circle_to_rectangle(D, H, A, B, n)
+            return jsonify(result)
 
+        elif shape == "offset_cone":
+            result = generate_offset_cone(
+                float(params["D"]),
+                float(params["H"]),
+                float(params["X"]),
+                int(params["n"])
+            )
+            return jsonify(result)
+
+        elif shape == "sphere":
+            result = generate_sphere(
+                float(params["D"]),
+                int(params["N"]),
+                int(params["n"])
+            )
+            return jsonify(result)
+
+        elif shape == "rectangle_to_circle":
+            D = float(params["D"])
+            H = float(params["H"])
+            A = float(params["A"])
+            B = float(params["B"])
+            n = int(params["n"])
+            result = generate_rectangle_to_circle(D, H, A, B, n)
+            return jsonify(result)
+
+        elif shape == "rectangle_to_circle_ecc":
+            out = generate_rectangle_to_circle_ecc(params, msp=doc.modelspace(), layer="CUT")
+            calc = out["calc"]
+            response_data = calc  # ✅ now we attach the calc dict to response_data
 
         else:
             return jsonify({"error": f"Shape '{shape}' not supported"}), 400
 
-        # ---------------------- DXF EXPORT (FIXED) ----------------------
+        # ---------------------- DXF EXPORT ----------------------
         try:
             text_buffer = io.StringIO()
             doc.write(text_buffer)
-            dxf_data = text_buffer.getvalue().encode("utf-8")  # Convert to bytes
+            dxf_data = text_buffer.getvalue().encode("utf-8")
             dxf_base64 = base64.b64encode(dxf_data).decode("utf-8")
         except Exception as e:
             print("Error writing DXF:", e)
             traceback.print_exc()
             return jsonify({"error": f"DXF write failed: {str(e)}"}), 500
 
-        # ✅ Return JSON with data + DXF
-        response_data = {"shape": shape, "dxf_base64": dxf_base64}
-        if isinstance(result, dict) and "data" in result:
-            response_data["data"] = result["data"]
+        # ✅ Unified JSON response with data + DXF
+        response_json = {
+            "shape": shape,
+            "dxf_base64": dxf_base64,
+            "data": response_data  # ✅ ensures calculated values appear in test.html
+        }
 
-        return jsonify(response_data)
+        return jsonify(response_json)
 
     except Exception as e:
         print("Error:", e, file=sys.stderr)
