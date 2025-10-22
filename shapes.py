@@ -1573,6 +1573,8 @@ def generate_tee_eccentric(params, msp=None, layer="CUT"):
 def generate_tee_on_bend(params, msp=None, layer="CUT"):
     """
     Generate flat pattern for Tee on Bend (branch on curved main pipe)
+    Compatible with unified DXF pipeline.
+
     Inputs:
       D : main pipe diameter
       d : branch diameter
@@ -1580,8 +1582,14 @@ def generate_tee_on_bend(params, msp=None, layer="CUT"):
       H : branch height
       n : number of generators
     Returns:
-      dict with π*d, l, h1..hn
+      {
+        "calc": {...},
+        "dxf_base64": ... (only if msp=None)
+      }
     """
+    import math, ezdxf, io, base64
+
+    # --- Inputs ---
     D = float(params["D"])
     d = float(params["d"])
     R = float(params["R"])
@@ -1593,28 +1601,54 @@ def generate_tee_on_bend(params, msp=None, layer="CUT"):
     periph_d = math.pi * d
     l = periph_d / n
 
+    # --- Compute height values along intersection ---
     pts = []
     h_values = []
 
     for i in range(n + 1):
         theta = 2 * math.pi * i / n
+        # Height combining bend curvature and branch offset
         h = H + Rc * (1 - math.cos(theta / 2)) + r * math.sin(theta)
         h_values.append(round(h, 2))
         pts.append((i * l, h))
 
-    # Close the pattern
+    # Close pattern
     pts_closed = [(0, 0)] + pts + [(periph_d, 0)]
 
-    # --- DXF drawing
-    if msp:
-        msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # --- DXF setup ---
+    local_mode = False
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
 
-    # --- Return calculated values
+    # --- DXF drawing ---
+    # Top curve
+    msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # Base line
+    msp.add_line((0, 0), (periph_d, 0), dxfattribs={"layer": layer, "color": 3})
+    # Vertical generator lines
+    for i in range(n + 1):
+        x = i * l
+        msp.add_line((x, 0), (x, pts[i][1]), dxfattribs={"layer": layer, "color": 5})
+
+    # --- Calculation results ---
     calc = {"π*d": round(periph_d, 2), "l": round(l, 2)}
     for i, h in enumerate(h_values, start=1):
         calc[f"h{i}"] = h
 
-    return {"calc": calc}
+    result = {"calc": calc}
+
+    # --- Encode DXF if standalone ---
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_text = buf.getvalue()
+        buf.close()
+        dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 22. Tee on Cone (Branch on Conical Main Pipe)
 def generate_tee_on_cone(params, msp=None, layer="CUT"):
