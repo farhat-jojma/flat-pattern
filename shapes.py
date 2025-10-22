@@ -1041,13 +1041,24 @@ def generate_offset_cone(D, H, X, n, msp=None, layer="CUT"):
     return result
 
 # 15. Sphere
-def generate_sphere(D, N, n):
+def generate_sphere(D, N, n, msp=None, layer="CUT"):
     """
     Generate DXF flat pattern for full sphere gore development.
-    - D : Sphere diameter
-    - N : Number of gores (vertical slices)
-    - n : Number of horizontal bands (latitude divisions)
+    Compatible with unified DXF pipeline.
+    Inputs:
+        D : Sphere diameter
+        N : Number of gores (vertical slices)
+        n : Number of horizontal bands (latitude divisions)
+        msp: DXF modelspace (optional)
+        layer: DXF layer (default = "CUT")
+    Returns:
+        {
+          "data": {...},
+          "dxf_base64": ... (only if msp=None)
+        }
     """
+    import math, ezdxf, io, base64
+
     R = D / 2
     piR = math.pi * R
 
@@ -1058,26 +1069,32 @@ def generate_sphere(D, N, n):
     r_vals = [R * math.sin(t) for t in theta_vals]
     y_vals = [R * math.cos(t) for t in theta_vals]
 
-    # Chord lengths per latitude
+    # Chord lengths per latitude (width of each gore at each latitude)
     L_vals = [(2 * math.pi * r) / N for r in r_vals]
 
-    # DXF setup
-    doc = ezdxf.new(setup=True)
-    msp = doc.modelspace()
-    gore_spacing = (piR / N) * 1.05
+    # --- DXF setup ---
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
+    else:
+        doc = None
+        local_mode = False
 
-    # --- draw each gore ---
+    gore_spacing = (piR / N) * 1.05  # small offset between gores for clarity
+
+    # --- Draw each gore ---
     for g in range(N):
         x_shift = g * gore_spacing
         pts_left = []
         pts_right = []
 
-        # Generate curved gore side using multiple small arcs between each latitude
+        # Generate curved gore outline using smooth interpolation
         for i in range(len(L_vals) - 1):
             y1, y2 = y_vals[i], y_vals[i + 1]
             l1, l2 = L_vals[i] / 2, L_vals[i + 1] / 2
 
-            # break each segment into smooth curve (10 substeps)
+            # Smooth transition between latitudes
             for k in range(11):
                 t = k / 10
                 y = y1 + (y2 - y1) * t
@@ -1085,26 +1102,37 @@ def generate_sphere(D, N, n):
                 pts_left.append((x_shift - half_width, y))
                 pts_right.append((x_shift + half_width, y))
 
+        # Outline gore contour
         outline = pts_left + pts_right[::-1]
-        msp.add_lwpolyline(outline, close=True)
+        msp.add_lwpolyline(outline, close=True, dxfattribs={"layer": layer})
 
-        # internal horizontal latitude lines
+        # Add internal latitude lines (optional visual grid)
         for i in range(len(y_vals)):
             y = y_vals[i]
             half_w = L_vals[i] / 2
-            msp.add_line((x_shift - half_w, y), (x_shift + half_w, y))
+            msp.add_line(
+                (x_shift - half_w, y),
+                (x_shift + half_w, y),
+                dxfattribs={"layer": layer},
+            )
 
-    # Encode DXF
-    buf = io.StringIO()
-    doc.write(buf)
-    dxf_data = buf.getvalue()
-    buf.close()
-    dxf_base64 = base64.b64encode(dxf_data.encode("utf-8")).decode("utf-8")
-
+    # --- Output data ---
     data = {"πR": round(piR, 2)}
     for i, L in enumerate(L_vals, 1):
         data[f"L{i}"] = round(L, 2)
-    return {"dxf_base64": dxf_base64, "data": data}
+
+    result = {"data": data}
+
+    # --- Encode DXF if standalone ---
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_data = buf.getvalue()
+        buf.close()
+        dxf_base64 = base64.b64encode(dxf_data.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 16. Auger (Helical Screw Flight)
 def generate_auger(params, msp=None, layer="CUT"):

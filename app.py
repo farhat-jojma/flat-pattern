@@ -187,9 +187,11 @@ def generate_dxf():
             out = generate_sphere(
                 float(params["D"]),
                 int(params["N"]),
-                int(params["n"])
+                int(params["n"]),
+                msp=msp,          # ✅ important
+                layer="CUT"
             )
-            response_data = out.get("calc", out.get("data", out))
+            response_data = out.get("data")
 
         elif shape == "rectangle_to_circle":
             out = generate_rectangle_to_circle(
