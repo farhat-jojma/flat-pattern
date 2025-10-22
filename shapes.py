@@ -1654,11 +1654,27 @@ def generate_tee_on_bend(params, msp=None, layer="CUT"):
 def generate_tee_on_cone(params, msp=None, layer="CUT"):
     """
     Generate flat pattern for Tee on Cone.
+    Compatible with unified DXF pipeline.
+
     Inputs:
-      D1, D2, L, A, d, H, X, n
+      D1 : base diameter of cone (bottom)
+      D2 : top diameter of cone
+      L  : slant height of cone
+      A  : vertical projection distance along cone
+      d  : branch diameter
+      H  : branch height
+      X  : lateral offset of branch
+      n  : number of generators
+
     Returns:
-      dict with π*d, l, h1..hn
+      {
+        "calc": {...},
+        "dxf_base64": ... (only if msp=None)
+      }
     """
+    import math, ezdxf, io, base64
+
+    # --- Inputs ---
     D1 = float(params["D1"])
     D2 = float(params["D2"])
     L = float(params["L"])
@@ -1670,37 +1686,60 @@ def generate_tee_on_cone(params, msp=None, layer="CUT"):
 
     R1, R2 = D1 / 2, D2 / 2
     r = d / 2
-    alpha = math.atan((R2 - R1) / L)
+    alpha = math.atan((R2 - R1) / L)  # cone slope angle
 
     periph_d = math.pi * d
     l = periph_d / n
 
+    # --- Points for pattern ---
     pts = []
     h_values = []
 
     for i in range(n + 1):
         θ = 2 * math.pi * i / n
-
-        # Vertical variation due to cone slope + tee offset
+        # Combined effects: cone + branch + offset
         cone_effect = (R2 - R1) * (A / L) * math.cos(alpha)
         branch_effect = r * math.sin(θ) - X * math.cos(θ)
         h = H + cone_effect + branch_effect
-
         h_values.append(round(h, 2))
         pts.append((i * l, h))
 
-    # Close the outline
+    # Close outline
     pts_closed = [(0, 0)] + pts + [(periph_d, 0)]
 
-    if msp:
-        msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # --- DXF setup ---
+    local_mode = False
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
 
-    # Return calculations
+    # --- DXF drawing ---
+    msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # Base line
+    msp.add_line((0, 0), (periph_d, 0), dxfattribs={"layer": layer, "color": 3})
+    # Generator lines
+    for i in range(n + 1):
+        x = i * l
+        msp.add_line((x, 0), (x, pts[i][1]), dxfattribs={"layer": layer, "color": 5})
+
+    # --- Calculations ---
     calc = {"π*d": round(periph_d, 2), "l": round(l, 2)}
     for i, h in enumerate(h_values, start=1):
         calc[f"h{i}"] = h
 
-    return {"calc": calc}
+    result = {"calc": calc}
+
+    # --- Encode DXF if standalone ---
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_text = buf.getvalue()
+        buf.close()
+        dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 23. Pants (Y-Branch)
 def generate_pants(params, msp=None, layer="CUT"):
