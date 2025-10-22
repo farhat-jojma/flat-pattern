@@ -143,9 +143,10 @@ def generate_dxf():
                 float(params["diameter"]),
                 float(params["height"]),
                 float(params["angle"]),
-                int(params["n"])
+                int(params["n"]),
+                msp=msp  # ✅ très important
             )
-            response_data = out.get("calc", out.get("data", out))
+            response_data = out.get("data")
 
         elif shape == "bend":
             out = generate_bend(

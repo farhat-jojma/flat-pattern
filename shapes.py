@@ -354,58 +354,60 @@ def generate_flange(D1, D2, D3, D4, N1, d1, N2, d2):
     return {"entities": entities, "data": data}
 
 # 7. Truncated Cylinder
-def generate_truncated_cylinder(diameter, height, angle_deg, n):
-    """
-    Generate the correct symmetrical flat pattern for a truncated cylinder.
-    Produces one full smooth wave crest centered at mid-length.
-    """
-    import math, ezdxf, io, base64
+def generate_truncated_cylinder(diameter, height, angle_deg, n, msp=None):
+    import math, ezdxf
 
     R = diameter / 2
     alpha = math.radians(angle_deg)
-    L_total = math.pi * diameter          # full development length (πD)
+    L_total = math.pi * diameter
     l = L_total / (n - 1)
 
     bottom = []
     top = []
     h_values = []
 
-    # Use full cosine cycle 0→2π to make rise and fall symmetrical
     for i in range(n):
-        theta = 2 * math.pi * i / (n - 1)   # 0 → 2π
+        theta = 2 * math.pi * i / (n - 1)
         h = height + (R * math.tan(alpha) / 2) * (1 - math.cos(theta))
         x = i * l
         bottom.append((x, 0))
         top.append((x, h))
         h_values.append(round(h, 2))
 
-    # Ensure both ends equal
     top[0] = (top[0][0], height)
     top[-1] = (top[-1][0], height)
 
-    # --- DXF creation ---
-    doc = ezdxf.new()
-    msp = doc.modelspace()
+    # If no msp passed, create local doc (for standalone test)
+    if msp is None:
+        doc = ezdxf.new()
+        msp = doc.modelspace()
+    else:
+        doc = None
 
+    # Draw pattern
     msp.add_lwpolyline(bottom, close=False)
     msp.add_line(bottom[0], top[0])
     msp.add_spline(top)
     msp.add_line(top[-1], bottom[-1])
 
-    # --- Encode DXF ---
-    buffer = io.StringIO()
-    doc.write(buffer)
-    dxf_data = buffer.getvalue()
-    dxf_base64 = base64.b64encode(dxf_data.encode("utf-8")).decode("utf-8")
-
-    return {
+    result = {
         "data": {
             "piD": round(L_total, 2),
             "l": round(l, 2),
             "h_values": h_values
-        },
-        "dxf_base64": dxf_base64
+        }
     }
+
+    # If standalone test mode
+    if doc:
+        import io, base64
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_data = buf.getvalue().encode("utf-8")
+        buf.close()
+        result["dxf_base64"] = base64.b64encode(dxf_data).decode("utf-8")
+
+    return result
 
 # 8. Bend
 def generate_bend(R, alpha_deg, D, N, n):
