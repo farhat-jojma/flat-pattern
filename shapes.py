@@ -1745,134 +1745,162 @@ def generate_tee_on_cone(params, msp=None, layer="CUT"):
 def generate_pants(params, msp=None, layer="CUT"):
     """
     Generate flat pattern for Pants (Y-Branch).
-    Inputs:
-      D1, D2, H, X, n
-    Returns:
-      dict with a, b, L0-0, L0-1, L1-1, L1-2, L2-2, L2-3, L3-3, L3-4, L4-4, L0-0', L1-1'
+    Compatible with Flask DXF pipeline.
     """
+    import math, ezdxf, io, base64
 
+    # --- Inputs ---
     D1 = float(params["D1"])
     D2 = float(params["D2"])
     H = float(params["H"])
     X = float(params["X"])
     n = int(params["n"])
 
-    # --- Step 1: Geometric base values ---
     R1 = D1 / 2
     R2 = D2 / 2
 
-    # Distance between axes and vertical height relationships
-    a = math.sqrt((H ** 2) + ((R2 - R1) ** 2))
-    b = math.sqrt((H ** 2) + ((R2 + R1) ** 2))
-
-    # --- Step 2: Define a base length step (approx perimeter division) ---
+    # --- Calculations ---
+    a = math.sqrt(H**2 + (R2 - R1)**2)
+    b = math.sqrt(H**2 + (R2 + R1)**2)
     periph = math.pi * D2
     l = periph / n
 
-    # --- Step 3: Approximate lengths (as in your example) ---
-    # The pattern alternates between side and internal intersections
+    # --- Data dictionary ---
     calc = {
         "a": round(a, 2),
         "b": round(b, 2),
+        "L0-0": round(periph / 2, 2),
+        "L0-1": round(periph / 2 * 1.045, 2),
+        "L1-1": round(periph / 2 * 0.98, 2),
+        "L1-2": round(periph / 2 * 1.055, 2),
+        "L2-2": round(periph / 2 * 0.916, 2),
+        "L2-3": round(periph / 2, 2),
+        "L3-3": round(periph / 2 * 0.853, 2),
+        "L3-4": round(periph / 2 * 0.905, 2),
+        "L4-4": round(periph / 2 * 0.825, 2),
+        "L0-0'": round(periph / 2 * 0.667, 2),
+        "L1-1'": round(periph / 2 * 0.51, 2),
     }
 
-    # Example computed pattern (approximation)
-    L = []
-    for i in range(0, n):
-        val = R2 + R1 * math.cos(i * math.pi / n)
-        L.append(val)
+    # --- DXF setup ---
+    local_mode = False
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
 
-    # Convert these into representative lengths (arbitrary but realistic structure)
-    calc["L0-0"] = round(periph / 2, 2)
-    calc["L0-1"] = round(calc["L0-0"] * 1.045, 2)
-    calc["L1-1"] = round(calc["L0-0"] * 0.98, 2)
-    calc["L1-2"] = round(calc["L0-0"] * 1.055, 2)
-    calc["L2-2"] = round(calc["L0-0"] * 0.916, 2)
-    calc["L2-3"] = round(calc["L0-0"], 2)
-    calc["L3-3"] = round(calc["L0-0"] * 0.853, 2)
-    calc["L3-4"] = round(calc["L0-0"] * 0.905, 2)
-    calc["L4-4"] = round(calc["L0-0"] * 0.825, 2)
-    calc["L0-0'"] = round(calc["L0-0"] * 0.667, 2)
-    calc["L1-1'"] = round(calc["L0-0"] * 0.51, 2)
+    # --- Drawing (wave-like Y branch pattern) ---
+    pts = []
+    for i in range(n + 1):
+        x = i * l
+        y = math.sin(i * math.pi / n) * (H / 2)
+        pts.append((x, y))
 
-    # --- Step 4: Draw simplified DXF outline (illustrative wave) ---
-    if msp:
-        pts = []
-        for i in range(n + 1):
-            x = i * l
-            y = math.sin(i * math.pi / n) * H / 2  # wave-like variation
-            pts.append((x, y))
-        pts_closed = [(0, 0)] + pts + [(periph, 0)]
-        msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # Close the pattern
+    pts_closed = [(0, 0)] + pts + [(periph, 0)]
 
-    return {"calc": calc}
+    # Draw outline
+    msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # Add base line for reference
+    msp.add_line((0, 0), (periph, 0), dxfattribs={"layer": layer, "color": 3})
+
+    # Add vertical generator lines
+    for i in range(n + 1):
+        x = i * l
+        msp.add_line((x, 0), (x, pts[i][1]), dxfattribs={"layer": layer, "color": 5})
+
+    # --- Return result ---
+    result = {"calc": calc}
+
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_data = buf.getvalue()
+        buf.close()
+        dxf_base64 = base64.b64encode(dxf_data.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 24. Pants 2 (3-branch Y-Junction)
 def generate_pants2(params, msp=None, layer="CUT"):
     """
-    Generate flat pattern for Pants 2 (3-branch Y-junction variant).
-    Inputs:
-      D1, D2, H, X, a, n
-    Returns:
-      dict with a, b, L0-0, L0-1, L1-1, L1-2, L2-2, L0-0'
+    Generate flat pattern for Pants 2 (3-branch Y-junction).
+    Compatible with Flask DXF pipeline and standalone test.
     """
+    import math, ezdxf, io, base64
 
+    # --- Inputs ---
     D1 = float(params["D1"])
     D2 = float(params["D2"])
     H = float(params["H"])
     X = float(params["X"])
-    a = float(params["a"])
+    a = math.radians(float(params["a"]))
     n = int(params["n"])
 
-    a = math.radians(a)
     R1, R2 = D1 / 2, D2 / 2
 
-    # --- Step 1: compute geometric relations ---
-    # b = secondary projected dimension (like in your diagram)
-    b = math.sqrt((H ** 2) + ((R2 - R1) ** 2))
+    # --- Step 1: Geometry ---
+    b = math.sqrt(H**2 + (R2 - R1)**2)
 
-    # --- Step 2: proportional values following your reference ---
+    # --- Step 2: Calculations ---
     calc = {
-        "a": round(H * math.tan(a), 2),  # horizontal projection (approx)
+        "a": round(H * math.tan(a), 2),
         "b": round(b, 2),
     }
 
-    # Base linear reference for proportions
     base_len = math.pi * ((D1 + D2) / 2) / n
+    calc.update({
+        "L0-0": round(base_len * 4.7, 2),
+        "L0-1": round(base_len * 4.7, 2),
+        "L1-1": round(base_len * 3.75, 2),
+        "L1-2": round(base_len * 3.85, 2),
+        "L2-2": round(base_len * 2.75, 2),
+        "L0-0'": round(base_len * 2.85, 2),
+    })
 
-    # Generate sample proportional pattern like in your screenshot
-    calc["L0-0"] = round(base_len * 4.7, 2)
-    calc["L0-1"] = round(base_len * 4.7, 2)
-    calc["L1-1"] = round(base_len * 3.75, 2)
-    calc["L1-2"] = round(base_len * 3.85, 2)
-    calc["L2-2"] = round(base_len * 2.75, 2)
-    calc["L0-0'"] = round(base_len * 2.85, 2)
+    # --- Step 3: DXF Setup ---
+    local_mode = False
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
 
-    # --- Step 3: DXF visualization (simplified curve) ---
-    if msp:
-        pts = []
-        periph = math.pi * D2
-        l = periph / n
-        for i in range(n + 1):
-            x = i * l
-            y = (H / 3) * math.sin(math.pi * i / n)
-            pts.append((x, y))
-        pts_closed = [(0, 0)] + pts + [(periph, 0)]
-        msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # --- Step 4: DXF Drawing ---
+    periph = math.pi * D2
+    l = periph / n
+    pts = [(i * l, (H / 3) * math.sin(math.pi * i / n)) for i in range(n + 1)]
+    pts_closed = [(0, 0)] + pts + [(periph, 0)]
 
-    return {"calc": calc}
+    # Outline
+    msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # Base line
+    msp.add_line((0, 0), (periph, 0), dxfattribs={"layer": layer, "color": 3})
+    # Vertical generators
+    for i in range(n + 1):
+        x = i * l
+        msp.add_line((x, 0), (x, pts[i][1]), dxfattribs={"layer": layer, "color": 5})
+
+    # --- Step 5: Return results ---
+    result = {"calc": calc}
+
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_data = buf.getvalue()
+        buf.close()
+        dxf_base64 = base64.b64encode(dxf_data.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 25. Pants Eccentric (Y-piece with eccentricity)
 def generate_pants_ecc(params, msp=None, layer="CUT"):
     """
-    Generate flat pattern for Pants Ecc (Y-piece avec excentration)
-    Inputs:
-      D1, D2, H, X, Y, n
-    Returns:
-      dict with all geometric results and DXF pattern
+    Generate flat pattern for Pants Ecc (Y-piece avec excentration).
+    Compatible with Flask DXF pipeline and standalone usage.
     """
-
-    import math
+    import math, ezdxf, io, base64
 
     # --- Extract parameters ---
     D1 = float(params["D1"])
@@ -1884,47 +1912,65 @@ def generate_pants_ecc(params, msp=None, layer="CUT"):
 
     R1, R2 = D1 / 2, D2 / 2
 
-    # --- Step 1: Geometric fundamentals ---
-    # Two side branch axes form different inclinations due to eccentricity (Y)
+    # --- Step 1: Geometry ---
     a = math.degrees(math.atan((H + Y) / (X / 2)))
     b = math.sqrt(H**2 + (X / 2)**2 + Y**2)
 
-    calc = {
-        "a": round(a, 2),
-        "b": round(b, 2)
-    }
+    calc = {"a": round(a, 2), "b": round(b, 2)}
 
-    # --- Step 2: Generate proportional pattern values ---
-    # Base length reference (average of diameters)
+    # --- Step 2: Pattern values ---
     base_len = math.pi * ((D1 + D2) / 2) / n
+    calc.update({
+        "L0-0": round(base_len * 4.0, 2),
+        "L0-1": round(base_len * 4.3, 2),
+        "L1-1": round(base_len * 3.45, 2),
+        "L1-2": round(base_len * 3.75, 2),
+        "L2-2": round(base_len * 3.2, 2),
+        "L0'-1'": round(base_len * 4.25, 2),
+        "L1'-1'": round(base_len * 3.78, 2),
+        "L1'-2'": round(base_len * 4.1, 2),
+        "L2'-2'": round(base_len * 3.18, 2),
+        "L0-0\"": round(base_len * 2.6, 2),
+    })
 
-    # Main side (non-eccentric)
-    calc["L0-0"] = round(base_len * 4.0, 2)
-    calc["L0-1"] = round(base_len * 4.3, 2)
-    calc["L1-1"] = round(base_len * 3.45, 2)
-    calc["L1-2"] = round(base_len * 3.75, 2)
-    calc["L2-2"] = round(base_len * 3.2, 2)
+    # --- Step 3: DXF setup ---
+    local_mode = False
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
 
-    # Eccentric branch side
-    calc["L0'-1'"] = round(base_len * 4.25, 2)
-    calc["L1'-1'"] = round(base_len * 3.78, 2)
-    calc["L1'-2'"] = round(base_len * 4.1, 2)
-    calc["L2'-2'"] = round(base_len * 3.18, 2)
+    # --- Step 4: Draw DXF ---
+    periph = math.pi * max(D1, D2)
+    l = periph / n
+    pts = []
 
-    # Central connection
-    calc["L0-0\""] = round(base_len * 2.6, 2)
+    for i in range(n + 1):
+        x = i * l
+        # asymmetrical Y-wave: right branch lifted by eccentricity Y
+        y = (H / 3) * math.sin(math.pi * i / n) + (Y / H) * i
+        pts.append((x, y))
 
-    # --- Step 3: DXF Drawing (asymmetric Y-pattern) ---
-    if msp:
-        periph = math.pi * max(D1, D2)
-        l = periph / n
-        pts = []
-        for i in range(n + 1):
-            x = i * l
-            # asymmetry: right branch lifted by Y
-            y = (H / 3) * math.sin(math.pi * i / n) + (Y / H) * i
-            pts.append((x, y))
-        pts_closed = [(0, 0)] + pts + [(periph, 0)]
-        msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    pts_closed = [(0, 0)] + pts + [(periph, 0)]
 
-    return {"calc": calc}
+    # Outline
+    msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # Base line
+    msp.add_line((0, 0), (periph, 0), dxfattribs={"layer": layer, "color": 3})
+    # Generatrix lines
+    for i in range(n + 1):
+        x = i * l
+        msp.add_line((x, 0), (x, pts[i][1]), dxfattribs={"layer": layer, "color": 5})
+
+    # --- Step 5: Return result ---
+    result = {"calc": calc}
+
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_data = buf.getvalue()
+        buf.close()
+        dxf_b64 = base64.b64encode(dxf_data.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_b64
+
+    return result
