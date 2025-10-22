@@ -83,21 +83,24 @@ def generate_dxf():
             response_data = res.get("data", {})
 
         elif shape == "frustum_cone":
-            d1 = float(params["diameter1"])
-            d2 = float(params["diameter2"])
-            value = float(params.get("height") or params.get("beta"))
-            mode = "H" if "height" in params else "B"
+            d1 = float(params.get("D1") or params.get("diameter1"))
+            d2 = float(params.get("D2") or params.get("diameter2"))
+
+            # Determine calculation mode
+            mode = params.get("mode", "H").upper()
+            value = float(params.get("H") if mode == "H" else params.get("beta"))
+
             res = generate_frustum_cone(d1, d2, value, mode)
             msp.add_lwpolyline(res["points"], close=True)
             response_data = res.get("data", {})
 
         elif shape == "frustum_cone_triangulation":
-            d1 = float(params["diameter1"])
-            d2 = float(params["diameter2"])
-            value = float(params.get("height") or params.get("beta"))
-            mode = "H" if "height" in params else "B"
+            d1 = float(params.get("D1") or params.get("diameter1"))
+            d2 = float(params.get("D2") or params.get("diameter2"))
+            H = float(params.get("H") or params.get("height"))
             n = int(params.get("n", 12))
-            res = generate_frustum_cone_triangulation(d1, d2, value, mode, n)
+
+            res = generate_frustum_cone_triangulation(d1, d2, H, "H", n)
             msp.add_lwpolyline(res["points"], close=True)
             for line in res["generators"]:
                 msp.add_line(line[0], line[1])

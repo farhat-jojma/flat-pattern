@@ -315,7 +315,6 @@ def generate_rectangle_to_rectangle(ab, bc, H, AB, BC):
 
     return {"faces": faces, "data": data}
 
-
 # 6. Flange
 def generate_flange(D1, D2, D3, D4, N1, d1, N2, d2):
     """
@@ -565,124 +564,7 @@ def generate_circle_to_rectangle(D, H, A, B, n):
         "dxf_base64": dxf_b64
     }
 
-# 10. Offset Cone
-def generate_offset_cone(D, H, X, n):
-    """
-    Generate DXF flat pattern for an Offset Cone (Cône excentré)
-    """
-
-    R = D / 2
-    a = 180 / n  # degree step
-
-    # --- Compute generator lengths ---
-    L_values = []
-    for i in range(n + 1):
-        theta = math.radians(i * a)
-        Li = math.sqrt(H**2 + (R + X * math.cos(theta))**2)
-        L_values.append(Li)
-
-    # --- Create DXF ---
-    doc = ezdxf.new(setup=True)
-    msp = doc.modelspace()
-
-    apex = (0, 0)
-    angle_step = math.radians(a)
-    angle_accum = 0
-
-    # Points along curve
-    points = []
-    for Li in L_values:
-        x = Li * math.cos(angle_accum)
-        y = Li * math.sin(angle_accum)
-        points.append((x, y))
-        angle_accum += angle_step
-
-    # Draw pattern
-    msp.add_lwpolyline([apex] + points, close=False)
-    msp.add_lwpolyline(points, close=True)
-
-    # --- Encode DXF (use StringIO for text) ---
-    text_buffer = io.StringIO()
-    doc.write(text_buffer)
-    dxf_text = text_buffer.getvalue()
-    text_buffer.close()
-
-    dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
-
-    # --- Prepare output data ---
-    data = {"a": round(a, 2)}
-    for i, L in enumerate(L_values):
-        data[f"L{i}"] = round(L, 2)
-
-    return {"dxf_base64": dxf_base64, "data": data}
-
-# 11. Sphere
-def generate_sphere(D, N, n):
-    """
-    Generate DXF flat pattern for full sphere gore development.
-    - D : Sphere diameter
-    - N : Number of gores (vertical slices)
-    - n : Number of horizontal bands (latitude divisions)
-    """
-    R = D / 2
-    piR = math.pi * R
-
-    # Angular divisions (0 → 180° for full sphere)
-    theta_vals = [math.radians(i * 180 / n) for i in range(n + 1)]
-
-    # Local radii and heights for each latitude
-    r_vals = [R * math.sin(t) for t in theta_vals]
-    y_vals = [R * math.cos(t) for t in theta_vals]
-
-    # Chord lengths per latitude
-    L_vals = [(2 * math.pi * r) / N for r in r_vals]
-
-    # DXF setup
-    doc = ezdxf.new(setup=True)
-    msp = doc.modelspace()
-    gore_spacing = (piR / N) * 1.05
-
-    # --- draw each gore ---
-    for g in range(N):
-        x_shift = g * gore_spacing
-        pts_left = []
-        pts_right = []
-
-        # Generate curved gore side using multiple small arcs between each latitude
-        for i in range(len(L_vals) - 1):
-            y1, y2 = y_vals[i], y_vals[i + 1]
-            l1, l2 = L_vals[i] / 2, L_vals[i + 1] / 2
-
-            # break each segment into smooth curve (10 substeps)
-            for k in range(11):
-                t = k / 10
-                y = y1 + (y2 - y1) * t
-                half_width = l1 + (l2 - l1) * t
-                pts_left.append((x_shift - half_width, y))
-                pts_right.append((x_shift + half_width, y))
-
-        outline = pts_left + pts_right[::-1]
-        msp.add_lwpolyline(outline, close=True)
-
-        # internal horizontal latitude lines
-        for i in range(len(y_vals)):
-            y = y_vals[i]
-            half_w = L_vals[i] / 2
-            msp.add_line((x_shift - half_w, y), (x_shift + half_w, y))
-
-    # Encode DXF
-    buf = io.StringIO()
-    doc.write(buf)
-    dxf_data = buf.getvalue()
-    buf.close()
-    dxf_base64 = base64.b64encode(dxf_data.encode("utf-8")).decode("utf-8")
-
-    data = {"πR": round(piR, 2)}
-    for i, L in enumerate(L_vals, 1):
-        data[f"L{i}"] = round(L, 2)
-    return {"dxf_base64": dxf_base64, "data": data}
-
-# 12. Rectangle to Circle
+# 10. Rectangle to Circle
 def generate_rectangle_to_circle(D, H, A, B, n):
     """
     Generate DXF flat pattern for Rectangle → Circle transition.
@@ -767,7 +649,7 @@ def generate_rectangle_to_circle(D, H, A, B, n):
 
     return {"dxf_base64": dxf_base64, "data": data}
 
-# 13. Rectangle to Circle Eccentric
+# 11. Rectangle to Circle Eccentric
 def generate_rectangle_to_circle_ecc(params, msp=None, layer="0"):
     """
     Rectangle -> Cercle excentré (développement)
@@ -975,7 +857,7 @@ def generate_rectangle_to_circle_ecc(params, msp=None, layer="0"):
 
     return {"entities": entities, "calc": calc}
 
-# 14. Frustum Eccentric (Angle)
+# 12. Frustum Eccentric (Angle)
 def generate_frustum_ecc_angle(params, msp=None, layer="0"):
     """
     Frustum Eccentric (Angle)
@@ -1051,7 +933,7 @@ def generate_frustum_ecc_angle(params, msp=None, layer="0"):
 
     return {"calc": calc, "entities": entities}
 
-# 15. Frustum Eccentric Parallel (Flat)
+# 13. Frustum Eccentric Parallel (Flat)
 def generate_frustum_ecc_paral(params, msp=None, layer="0"):
     """
     Frustum Eccentric Parallel (Flat pattern)
@@ -1126,6 +1008,123 @@ def generate_frustum_ecc_paral(params, msp=None, layer="0"):
         calc[f"L{i}"] = Li
 
     return {"calc": calc, "entities": entities}
+
+# 14. Offset Cone
+def generate_offset_cone(D, H, X, n):
+    """
+    Generate DXF flat pattern for an Offset Cone (Cône excentré)
+    """
+
+    R = D / 2
+    a = 180 / n  # degree step
+
+    # --- Compute generator lengths ---
+    L_values = []
+    for i in range(n + 1):
+        theta = math.radians(i * a)
+        Li = math.sqrt(H**2 + (R + X * math.cos(theta))**2)
+        L_values.append(Li)
+
+    # --- Create DXF ---
+    doc = ezdxf.new(setup=True)
+    msp = doc.modelspace()
+
+    apex = (0, 0)
+    angle_step = math.radians(a)
+    angle_accum = 0
+
+    # Points along curve
+    points = []
+    for Li in L_values:
+        x = Li * math.cos(angle_accum)
+        y = Li * math.sin(angle_accum)
+        points.append((x, y))
+        angle_accum += angle_step
+
+    # Draw pattern
+    msp.add_lwpolyline([apex] + points, close=False)
+    msp.add_lwpolyline(points, close=True)
+
+    # --- Encode DXF (use StringIO for text) ---
+    text_buffer = io.StringIO()
+    doc.write(text_buffer)
+    dxf_text = text_buffer.getvalue()
+    text_buffer.close()
+
+    dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
+
+    # --- Prepare output data ---
+    data = {"a": round(a, 2)}
+    for i, L in enumerate(L_values):
+        data[f"L{i}"] = round(L, 2)
+
+    return {"dxf_base64": dxf_base64, "data": data}
+
+# 15. Sphere
+def generate_sphere(D, N, n):
+    """
+    Generate DXF flat pattern for full sphere gore development.
+    - D : Sphere diameter
+    - N : Number of gores (vertical slices)
+    - n : Number of horizontal bands (latitude divisions)
+    """
+    R = D / 2
+    piR = math.pi * R
+
+    # Angular divisions (0 → 180° for full sphere)
+    theta_vals = [math.radians(i * 180 / n) for i in range(n + 1)]
+
+    # Local radii and heights for each latitude
+    r_vals = [R * math.sin(t) for t in theta_vals]
+    y_vals = [R * math.cos(t) for t in theta_vals]
+
+    # Chord lengths per latitude
+    L_vals = [(2 * math.pi * r) / N for r in r_vals]
+
+    # DXF setup
+    doc = ezdxf.new(setup=True)
+    msp = doc.modelspace()
+    gore_spacing = (piR / N) * 1.05
+
+    # --- draw each gore ---
+    for g in range(N):
+        x_shift = g * gore_spacing
+        pts_left = []
+        pts_right = []
+
+        # Generate curved gore side using multiple small arcs between each latitude
+        for i in range(len(L_vals) - 1):
+            y1, y2 = y_vals[i], y_vals[i + 1]
+            l1, l2 = L_vals[i] / 2, L_vals[i + 1] / 2
+
+            # break each segment into smooth curve (10 substeps)
+            for k in range(11):
+                t = k / 10
+                y = y1 + (y2 - y1) * t
+                half_width = l1 + (l2 - l1) * t
+                pts_left.append((x_shift - half_width, y))
+                pts_right.append((x_shift + half_width, y))
+
+        outline = pts_left + pts_right[::-1]
+        msp.add_lwpolyline(outline, close=True)
+
+        # internal horizontal latitude lines
+        for i in range(len(y_vals)):
+            y = y_vals[i]
+            half_w = L_vals[i] / 2
+            msp.add_line((x_shift - half_w, y), (x_shift + half_w, y))
+
+    # Encode DXF
+    buf = io.StringIO()
+    doc.write(buf)
+    dxf_data = buf.getvalue()
+    buf.close()
+    dxf_base64 = base64.b64encode(dxf_data.encode("utf-8")).decode("utf-8")
+
+    data = {"πR": round(piR, 2)}
+    for i, L in enumerate(L_vals, 1):
+        data[f"L{i}"] = round(L, 2)
+    return {"dxf_base64": dxf_base64, "data": data}
 
 # 16. Auger (Helical Screw Flight)
 def generate_auger(params, msp=None, layer="CUT"):
@@ -1628,10 +1627,10 @@ def generate_pants2(params, msp=None, layer="CUT"):
     D2 = float(params["D2"])
     H = float(params["H"])
     X = float(params["X"])
-    a_deg = float(params["a"])
+    a = float(params["a"])
     n = int(params["n"])
 
-    a = math.radians(a_deg)
+    a = math.radians(a)
     R1, R2 = D1 / 2, D2 / 2
 
     # --- Step 1: compute geometric relations ---
