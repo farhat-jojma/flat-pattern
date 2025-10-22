@@ -1199,14 +1199,25 @@ def generate_auger(params, msp=None, layer="CUT"):
 # 17. Breeches (2-branch Y piece)
 def generate_breeches_full(params, msp=None, layer="CUT"):
     """
-    Generate Breeches (2-branch) flat pattern.
-    Input params:
-        D  : diameter (mm)
-        L1 : branch A length (mm)
-        L2 : branch B length (mm)
-        a  : branch angle (°)
-        n  : number of generators
+    Generate Breeches (2-branch) flat pattern (développement des culottes doubles).
+    Compatible avec le pipeline DXF global.
+
+    Entrée:
+        params = {
+          "D":  diameter (mm),
+          "L1": longueur branche A (mm),
+          "L2": longueur branche B (mm),
+          "a":  angle entre branches (°),
+          "n":  nombre de génératrices
+        }
+    Retour:
+        {
+          "calc": {...},
+          "dxf_base64": ... (si msp=None)
+        }
     """
+    import math, ezdxf, io, base64
+
     # --- Inputs ---
     D = float(params["D"])
     L1 = float(params["L1"])
@@ -1218,55 +1229,79 @@ def generate_breeches_full(params, msp=None, layer="CUT"):
     periphery = math.pi * D
     l = periphery / n
 
-    # heights (simple geometric model)
+    # Hauteurs géométriques
     h1 = L1
     h2 = L2
     h3 = math.sqrt(L1**2 + L2**2 - 2 * L1 * L2 * math.cos(a))
     h1p = L2
     h2p = h3
 
+    # --- DXF Setup ---
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
+    else:
+        doc = None
+        local_mode = False
+
     # --- DXF Drawing ---
-    if msp:
-        pts_top = []
-        pts_bot = []
+    pts_top = []
+    pts_bot = []
 
-        # build sinusoidal-like top & bottom profile
-        for i in range(n + 1):
-            x = i * l
-            theta = i / n * math.pi
-            # upper curve (branch A)
-            y_top = h1 - (h1 - h3) * (1 - math.cos(theta)) / 2
-            # lower curve (branch B)
-            y_bot = -h1p + (h1p - h2p) * (1 - math.cos(theta)) / 2
+    # Profiles supérieur et inférieur
+    for i in range(n + 1):
+        x = i * l
+        theta = i / n * math.pi
 
-            pts_top.append((x, y_top))
-            pts_bot.append((x, y_bot))
+        # courbe haute (branche A)
+        y_top = h1 - (h1 - h3) * (1 - math.cos(theta)) / 2
+        # courbe basse (branche B)
+        y_bot = -h1p + (h1p - h2p) * (1 - math.cos(theta)) / 2
 
-        # Build closed outline for both profiles
-        outline = []
-        outline += pts_bot                     # bottom curve
-        outline += [(pts_bot[-1][0], 0)]       # right vertical up
-        outline += list(reversed(pts_top))     # top curve reversed
-        outline += [(0, 0)]                    # left closing line
+        pts_top.append((x, y_top))
+        pts_bot.append((x, y_bot))
 
-        msp.add_lwpolyline(outline, close=True, dxfattribs={"layer": layer})
+    # Polyligne fermée du développé
+    outline = []
+    outline += pts_bot                          # courbe inférieure
+    outline += [(pts_bot[-1][0], 0)]            # droite verticale droite
+    outline += list(reversed(pts_top))          # courbe supérieure inversée
+    outline += [(0, 0)]                         # fermeture gauche
 
-        # optional: baseline and midline for clarity
-        msp.add_line((0, 0), (periphery, 0), dxfattribs={"color": 3})
-        msp.add_line((0, (h1 - h1p)/2), (periphery, (h1 - h1p)/2), dxfattribs={"color": 5})
+    msp.add_lwpolyline(outline, close=True, dxfattribs={"layer": layer})
 
-    # --- Return data ---
-    return {
-        "calc": {
-            "πD": round(periphery, 2),
-            "l": round(l, 2),
-            "h1": round(h1, 2),
-            "h2": round(h2, 2),
-            "h3": round(h3, 2),
-            "h'1": round(h1p, 2),
-            "h'2": round(h2p, 2),
-        }
+    # Lignes guides (optionnelles)
+    msp.add_line((0, 0), (periphery, 0), dxfattribs={"color": 3, "layer": layer})
+    msp.add_line(
+        (0, (h1 - h1p) / 2),
+        (periphery, (h1 - h1p) / 2),
+        dxfattribs={"color": 5, "layer": layer},
+    )
+
+    # --- Données calculées ---
+    calc = {
+        "πD": round(periphery, 2),
+        "l": round(l, 2),
+        "h1": round(h1, 2),
+        "h2": round(h2, 2),
+        "h3": round(h3, 2),
+        "h'1": round(h1p, 2),
+        "h'2": round(h2p, 2),
     }
+
+    result = {"calc": calc}
+
+    # --- Si standalone, encoder DXF ---
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_text = buf.getvalue()
+        buf.close()
+        dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 18. Offset Tee (Oblique branch with offset)
 def generate_offset_tee(params, msp=None, layer="CUT"):
