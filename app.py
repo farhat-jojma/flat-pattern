@@ -195,9 +195,11 @@ def generate_dxf():
                 float(params["H"]),
                 float(params["A"]),
                 float(params["B"]),
-                int(params["n"])
+                int(params["n"]),
+                msp=msp,        # ✅ crucial
+                layer="CUT"
             )
-            response_data = out.get("calc", out.get("data", out))
+            response_data = out.get("data")
 
         elif shape == "rectangle_to_circle_ecc":
             out = generate_rectangle_to_circle_ecc(params, msp=msp, layer="CUT")

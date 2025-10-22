@@ -580,25 +580,19 @@ def generate_circle_to_rectangle(D, H, A, B, n, msp=None, layer="CUT"):
     return result
 
 # 10. Rectangle to Circle
-def generate_rectangle_to_circle(D, H, A, B, n):
+def generate_rectangle_to_circle(D, H, A, B, n, msp=None, layer="CUT"):
     """
     Generate DXF flat pattern for Rectangle → Circle transition.
-    Top edge = true circular arc (not polygonal)
-    Inputs:
-        D: circle diameter
-        H: height
-        A: rectangle length
-        B: rectangle width
-        n: number of cuts
+    Compatible with unified DXF pipeline (draws directly in msp).
     """
     import math, ezdxf, io, base64
 
     # --- Geometry ---
     R = D / 2
-    n = max(6, int(n))  # ensure smooth
+    n = max(6, int(n))
     A_star = A
     B_star = B
-    R_dev = math.sqrt((A/2)**2 + (B/2)**2 + H**2)
+    R_dev = math.sqrt((A / 2) ** 2 + (B / 2) ** 2 + H ** 2)
     c = (math.pi * R) / n
 
     # --- Slant lengths for data ---
@@ -610,11 +604,16 @@ def generate_rectangle_to_circle(D, H, A, B, n):
         l = math.sqrt(dx**2 + dy**2 + H**2)
         l_values.append(l)
 
-    # --- DXF setup ---
-    doc = ezdxf.new(setup=True)
-    msp = doc.modelspace()
+    # --- DXF handling ---
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
+    else:
+        doc = None
+        local_mode = False
 
-    # Outer pattern (rectangle projected edge)
+    # --- Outer pattern (rectangle projected edge) ---
     angle_step = 2 * math.pi / (2 * n)
     points = []
     for i in range(n + 1):
@@ -624,8 +623,7 @@ def generate_rectangle_to_circle(D, H, A, B, n):
         points.append((x, y))
 
     # ✅ Top circle (true circular edge)
-    center = (0, 0)
-    circle = msp.add_circle(center, R)
+    msp.add_circle((0, 0), R, dxfattribs={"layer": layer})
 
     # Connect outer to circle perimeter using radial lines
     for i in range(n + 1):
@@ -635,21 +633,17 @@ def generate_rectangle_to_circle(D, H, A, B, n):
         x_inner = R * math.sin(angle)
         y_inner = R * math.cos(angle)
 
-        # outer and inner connection lines
+        # Outer edge line (next segment)
         if i < n:
-            msp.add_line((x_outer, y_outer),
-                         (R_dev * math.sin(angle + angle_step), R_dev * math.cos(angle + angle_step)))
-        msp.add_line((x_outer, y_outer), (x_inner, y_inner))
+            x_next = R_dev * math.sin(angle + angle_step)
+            y_next = R_dev * math.cos(angle + angle_step)
+            msp.add_line((x_outer, y_outer), (x_next, y_next), dxfattribs={"layer": layer})
 
-    # ✅ close first connection line too
-    msp.add_line((points[0][0], points[0][1]), (R * math.sin(0), R * math.cos(0)))
+        # Radial connection
+        msp.add_line((x_outer, y_outer), (x_inner, y_inner), dxfattribs={"layer": layer})
 
-    # --- Encode DXF ---
-    buf = io.StringIO()
-    doc.write(buf)
-    dxf_text = buf.getvalue()
-    buf.close()
-    dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
+    # Close first connection
+    msp.add_line(points[0], (R * math.sin(0), R * math.cos(0)), dxfattribs={"layer": layer})
 
     # --- Output data ---
     data = {
@@ -662,7 +656,16 @@ def generate_rectangle_to_circle(D, H, A, B, n):
     for i, l in enumerate(l_values, 1):
         data[f"l{i}"] = round(l, 2)
 
-    return {"dxf_base64": dxf_base64, "data": data}
+    result = {"data": data}
+
+    # --- If local test mode, also return encoded DXF ---
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_bytes = buf.getvalue().encode("utf-8")
+        result["dxf_base64"] = base64.b64encode(dxf_bytes).decode("utf-8")
+
+    return result
 
 # 11. Rectangle to Circle Eccentric
 def generate_rectangle_to_circle_ecc(params, msp=None, layer="0"):
