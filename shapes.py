@@ -410,11 +410,12 @@ def generate_truncated_cylinder(diameter, height, angle_deg, n, msp=None):
     return result
 
 # 8. Bend
-def generate_bend(R, alpha_deg, D, N, n):
+def generate_bend(R, alpha_deg, D, N, n, msp=None, layer="CUT"):
     """
     Génère un développé rectangulaire avec deux bords sinusoïdaux
     parfaitement symétriques, phase corrigée (crête à gauche).
     """
+    import math
 
     # --- Géométrie de base ---
     piD = math.pi * D
@@ -441,30 +442,39 @@ def generate_bend(R, alpha_deg, D, N, n):
         bot_pts.append((x, y_bot))
         h_vals.append(round(wave(x), 2))
 
-    # --- Création DXF ---
-    doc = ezdxf.new()
-    msp = doc.modelspace()
+    # --- Si aucun modelspace n'est fourni, on crée un DXF local pour test ---
+    if msp is None:
+        import ezdxf, io, base64
+        doc = ezdxf.new()
+        msp = doc.modelspace()
+        local_mode = True
+    else:
+        doc = None
+        local_mode = False
 
-    rect = [(0, 0), (piD, 0), (piD, H), (0, H), (0, 0)]
-    msp.add_lwpolyline(rect, close=True)
-    msp.add_spline(top_pts, dxfattribs={"color": 5})
-    msp.add_spline(bot_pts, dxfattribs={"color": 5})
+    # --- Dessin dans le DXF ---
+    msp.add_lwpolyline([(0, 0), (piD, 0), (piD, H), (0, H), (0, 0)], close=True, dxfattribs={"layer": layer})
+    msp.add_spline(top_pts, dxfattribs={"layer": layer, "color": 5})
+    msp.add_spline(bot_pts, dxfattribs={"layer": layer, "color": 5})
 
-    # --- Encodage DXF ---
-    buf = io.StringIO()
-    doc.write(buf)
-    dxf_b64 = base64.b64encode(buf.getvalue().encode("utf-8")).decode("utf-8")
-
-    return {
+    result = {
         "data": {
             "piD": round(piD, 2),
             "A": round(A, 2),
             "l": round(l, 2),
             "h_vals": h_vals,
             "gap": round(gap, 2),
-        },
-        "dxf_base64": dxf_b64
+        }
     }
+
+    # --- Si mode local (test), générer DXF encodé ---
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_bytes = buf.getvalue().encode("utf-8")
+        result["dxf_base64"] = base64.b64encode(dxf_bytes).decode("utf-8")
+
+    return result
 
 # 9. Circle to Rectangle
 def generate_circle_to_rectangle(D, H, A, B, n):

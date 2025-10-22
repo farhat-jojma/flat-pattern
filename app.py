@@ -155,8 +155,10 @@ def generate_dxf():
                 float(params["D"]),
                 int(params["N"]),
                 int(params["n"]),
+                msp=msp,  # ✅ très important
+                layer="CUT"
             )
-            response_data = out.get("calc", out.get("data", out))
+            response_data = out.get("data")
 
         elif shape == "circle_to_rectangle":
             out = generate_circle_to_rectangle(
