@@ -1495,6 +1495,7 @@ def generate_tee_oblique(params, msp=None, layer="CUT"):
 def generate_tee_eccentric(params, msp=None, layer="CUT"):
     """
     Generate the flat pattern for a Tee Eccentric (90° branch with offset X)
+    Compatible with unified DXF pipeline.
     Inputs:
       D : diameter of main pipe
       d : diameter of branch
@@ -1502,15 +1503,21 @@ def generate_tee_eccentric(params, msp=None, layer="CUT"):
       X : offset between axes
       n : number of generators
     Returns:
-      calc dict with π*d, l, h1..hn
+      {
+        "calc": {...},
+        "dxf_base64": ... (only if msp=None)
+      }
     """
+    import math, ezdxf, io, base64
+
+    # --- Inputs ---
     D = float(params["D"])
     d = float(params["d"])
     H = float(params["H"])
     X = float(params["X"])
     n = int(params["n"])
 
-    # --- Calculations
+    # --- Calculations ---
     periph_d = math.pi * d
     l = periph_d / n
 
@@ -1527,16 +1534,40 @@ def generate_tee_eccentric(params, msp=None, layer="CUT"):
     # Close the shape (flat bottom)
     pts_closed = [(0, 0)] + pts + [(periph_d, 0)]
 
-    # --- DXF drawing
-    if msp:
-        msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # --- DXF Setup ---
+    local_mode = False
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
 
-    # --- Calculation results
+    # --- DXF Drawing ---
+    # Main profile
+    msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
+    # Baseline
+    msp.add_line((0, 0), (periph_d, 0), dxfattribs={"layer": layer, "color": 3})
+    # Optional generators
+    for i in range(n + 1):
+        x = i * l
+        msp.add_line((x, 0), (x, pts[i][1]), dxfattribs={"layer": layer, "color": 5})
+
+    # --- Calculation results ---
     calc = {"π*d": round(periph_d, 2), "l": round(l, 2)}
     for i, h in enumerate(h_values, start=1):
         calc[f"h{i}"] = h
 
-    return {"calc": calc}
+    result = {"calc": calc}
+
+    # --- Encode DXF if standalone ---
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_text = buf.getvalue()
+        buf.close()
+        dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 21. Tee on Bend (Branch on Curved Main Pipe)
 def generate_tee_on_bend(params, msp=None, layer="CUT"):
