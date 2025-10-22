@@ -477,12 +477,13 @@ def generate_bend(R, alpha_deg, D, N, n, msp=None, layer="CUT"):
     return result
 
 # 9. Circle to Rectangle
-def generate_circle_to_rectangle(D, H, A, B, n):
+def generate_circle_to_rectangle(D, H, A, B, n, msp=None, layer="CUT"):
     """
     Circle-to-Rectangle visual flat pattern (4-fan symmetric design)
-    Matches the green reference drawing: 
-    horizontal base, smooth concave arc, and clean fan rays.
+    Compatible with unified DXF pipeline (draws directly in msp).
     """
+
+    import math, ezdxf, io, base64
 
     # --- Parameters ---
     R = D / 2.0
@@ -498,7 +499,6 @@ def generate_circle_to_rectangle(D, H, A, B, n):
     base_right = (xR, base_y)
 
     # --- Arc geometry (concave downward) ---
-    # We’ll define the arc as a shallow Bezier curve for smooth control.
     p0 = (-halfA - 0.5 * B, H * 0.6)
     p1 = (-A * 0.25, H * 0.2)
     p2 = (A * 0.25, H * 0.2)
@@ -511,11 +511,10 @@ def generate_circle_to_rectangle(D, H, A, B, n):
             u**3 * P0[1] + 3*u*u*t * P1[1] + 3*u*t*t * P2[1] + t**3 * P3[1],
         )
 
-    m = 4 * n  # smooth arc resolution
+    m = 4 * n
     arc_pts = [bezier_cubic(i/(m-1), p0, p1, p2, p3) for i in range(m)]
 
-    # --- Fan zone boundaries ---
-    # Split arc into 4 zones
+    # --- Fan zones ---
     def arc_slice(start_t, end_t):
         i0 = int(round(start_t * (m - 1)))
         i1 = int(round(end_t * (m - 1)))
@@ -526,33 +525,34 @@ def generate_circle_to_rectangle(D, H, A, B, n):
     right_inner_arc = arc_slice(0.50, 0.75)
     right_outer_arc = arc_slice(0.75, 1.00)
 
-    # --- Base anchor points ---
     inner_left = (-A / 4.0, base_y)
     inner_right = (A / 4.0, base_y)
 
-    # --- DXF setup ---
-    doc = ezdxf.new("R2010")
-    msp = doc.modelspace()
+    # --- Si aucun modelspace fourni, créer un local pour test ---
+    if msp is None:
+        doc = ezdxf.new("R2010")
+        msp = doc.modelspace()
+        local_mode = True
+    else:
+        doc = None
+        local_mode = False
 
-    # Base line
-    msp.add_line(base_left, base_right)
+    # --- DXF drawing ---
+    msp.add_line(base_left, base_right, dxfattribs={"layer": layer})
+    msp.add_lwpolyline(arc_pts, dxfattribs={"layer": layer})
 
-    # Arc line
-    msp.add_lwpolyline(arc_pts)
-
-    # Fans (4 symmetric)
     for pt in left_outer_arc:
-        msp.add_line(base_left, pt)
+        msp.add_line(base_left, pt, dxfattribs={"layer": layer})
     for pt in left_inner_arc:
-        msp.add_line(inner_left, pt)
+        msp.add_line(inner_left, pt, dxfattribs={"layer": layer})
     for pt in right_inner_arc:
-        msp.add_line(inner_right, pt)
+        msp.add_line(inner_right, pt, dxfattribs={"layer": layer})
     for pt in right_outer_arc:
-        msp.add_line(base_right, pt)
+        msp.add_line(base_right, pt, dxfattribs={"layer": layer})
 
-    # Side flanges (optional, for realism)
-    msp.add_lwpolyline([base_left, (xL - 0.5 * B, H * 0.6), left_outer_arc[0]])
-    msp.add_lwpolyline([base_right, (xR + 0.5 * B, H * 0.6), right_outer_arc[-1]])
+    # Optional flanges
+    msp.add_lwpolyline([base_left, (xL - 0.5 * B, H * 0.6), left_outer_arc[0]], dxfattribs={"layer": layer})
+    msp.add_lwpolyline([base_right, (xR + 0.5 * B, H * 0.6), right_outer_arc[-1]], dxfattribs={"layer": layer})
 
     # --- Representative data ---
     l_values = []
@@ -561,20 +561,23 @@ def generate_circle_to_rectangle(D, H, A, B, n):
         dy = left_inner_arc[i][1] - inner_left[1]
         l_values.append(round(math.hypot(dx, dy), 2))
 
-    # Encode DXF
-    buf = io.StringIO()
-    doc.write(buf)
-    dxf_b64 = base64.b64encode(buf.getvalue().encode("utf-8")).decode("utf-8")
-
-    return {
+    result = {
         "data": {
             "R": round(R, 2),
             "A*": round(A, 2),
             "B*": round(B, 2),
             "l_values": l_values
-        },
-        "dxf_base64": dxf_b64
+        }
     }
+
+    # --- DXF local (only if tested standalone) ---
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_bytes = buf.getvalue().encode("utf-8")
+        result["dxf_base64"] = base64.b64encode(dxf_bytes).decode("utf-8")
+
+    return result
 
 # 10. Rectangle to Circle
 def generate_rectangle_to_circle(D, H, A, B, n):

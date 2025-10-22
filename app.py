@@ -166,9 +166,11 @@ def generate_dxf():
                 float(params["H"]),
                 float(params["A"]),
                 float(params["B"]),
-                int(params["n"])
+                int(params["n"]),
+                msp=msp,  # ✅ crucial
+                layer="CUT"
             )
-            response_data = out.get("calc", out.get("data", out))
+            response_data = out.get("data")
 
         elif shape == "offset_cone":
             out = generate_offset_cone(
