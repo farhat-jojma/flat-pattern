@@ -1307,6 +1307,8 @@ def generate_breeches_full(params, msp=None, layer="CUT"):
 def generate_offset_tee(params, msp=None, layer="CUT"):
     """
     Generate the flat pattern for an OFFSET TEE (oblique branch with offset).
+    Compatible with the unified DXF pipeline.
+
     Inputs:
       D - main pipe diameter
       d - branch diameter
@@ -1314,7 +1316,13 @@ def generate_offset_tee(params, msp=None, layer="CUT"):
       X - offset distance
       a - branch angle (degrees)
       n - number of generators
+    Returns:
+      {
+        "calc": {...},
+        "dxf_base64": ... (only if msp=None)
+      }
     """
+    import math, ezdxf, io, base64
 
     # --- Parameters ---
     D = float(params["D"])
@@ -1331,7 +1339,6 @@ def generate_offset_tee(params, msp=None, layer="CUT"):
     # --- Compute heights (intersection line development) ---
     heights = []
     points = []
-
     for i in range(n + 1):
         theta = 2 * math.pi * i / n
         # Theoretical height for oblique cut with offset
@@ -1339,23 +1346,40 @@ def generate_offset_tee(params, msp=None, layer="CUT"):
         heights.append(round(h, 2))
         points.append((i * l, h))
 
-    # --- DXF Drawing ---
-    if msp:
-        # Outline top curve
-        msp.add_lwpolyline(points, dxfattribs={"layer": layer})
-        # Base line
-        msp.add_line((0, 0), (periphery, 0), dxfattribs={"layer": layer})
-        # Vertical generator lines
-        for i in range(n + 1):
-            x = i * l
-            msp.add_line((x, 0), (x, points[i][1]), dxfattribs={"layer": layer})
+    # --- DXF Setup ---
+    local_mode = False
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
 
-    # --- Return calculations ---
+    # --- DXF Drawing ---
+    # Base line
+    msp.add_line((0, 0), (periphery, 0), dxfattribs={"layer": layer})
+    # Top curve
+    msp.add_lwpolyline(points, dxfattribs={"layer": layer})
+    # Vertical generator lines
+    for i in range(n + 1):
+        x = i * l
+        msp.add_line((x, 0), (x, points[i][1]), dxfattribs={"layer": layer})
+
+    # --- Data ---
     data = {"π*d": round(periphery, 2), "l": round(l, 2)}
     for i, h in enumerate(heights, start=1):
         data[f"h{i}"] = h
 
-    return {"calc": data}
+    result = {"calc": data}
+
+    # --- Encode DXF if standalone ---
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_text = buf.getvalue()
+        buf.close()
+        dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 19. Tee Oblique (Y-Tee)
 def generate_tee_oblique(params, msp=None, layer="CUT"):
