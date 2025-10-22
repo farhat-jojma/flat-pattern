@@ -1388,7 +1388,9 @@ def generate_tee_oblique(params, msp=None, layer="CUT"):
     Returns both:
       A: branch development (flat pattern)
       B: main pipe cutout (elliptical projection)
+    Compatible with unified DXF pipeline.
     """
+    import math, ezdxf, io, base64
 
     # --- Inputs ---
     L1 = float(params["L1"])
@@ -1411,7 +1413,7 @@ def generate_tee_oblique(params, msp=None, layer="CUT"):
 
     for i in range(n + 1):
         theta = 2 * math.pi * i / n
-        # Formula for intersection height along the branch
+        # Intersection height along the branch
         h = L1 * math.sin(a) * abs(math.cos(theta / 2))
         h_values.append(round(h, 2))
         pts_A.append((i * l, h))
@@ -1432,23 +1434,32 @@ def generate_tee_oblique(params, msp=None, layer="CUT"):
         l2 = r * math.cos(a) * (1 - math.cos(theta / 2))
         h_prime.append(round(h2, 2))
         l_prime.append(round(l2, 2))
-        x = l2 * 5.0  # scale horizontally for DXF visibility
-        y = h2 * 5.0  # scale vertically for DXF visibility
+        x = l2 * 5.0  # scaled for visibility
+        y = h2 * 5.0
         pts_B.append((x, y))
 
     # -------------------------------------
-    # DXF drawing
+    # DXF Drawing (works with or without msp)
     # -------------------------------------
-    if msp:
-        # Branch pattern (left)
-        msp.add_lwpolyline(pts_A_closed, close=True, dxfattribs={"layer": "BRANCH"})
-        # Main pipe hole (right, shifted)
-        offset_x = periph_d + d * 2
-        pts_B_shifted = [(x + offset_x, y) for x, y in pts_B]
-        msp.add_lwpolyline(pts_B_shifted, close=True, dxfattribs={"layer": "MAIN"})
+    local_mode = False
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
+
+    # Branch pattern (left)
+    msp.add_lwpolyline(pts_A_closed, close=True, dxfattribs={"layer": layer})
+
+    # Main pipe hole (right, shifted)
+    offset_x = periph_d + d * 2
+    pts_B_shifted = [(x + offset_x, y) for x, y in pts_B]
+    msp.add_lwpolyline(pts_B_shifted, close=True, dxfattribs={"layer": layer})
+
+    # Guide line between both parts
+    msp.add_line((periph_d, 0), (offset_x, 0), dxfattribs={"layer": layer, "color": 2})
 
     # -------------------------------------
-    # Calculations to return
+    # Calculations
     # -------------------------------------
     calc = {
         "π*d": round(periph_d, 2),
@@ -1456,17 +1467,29 @@ def generate_tee_oblique(params, msp=None, layer="CUT"):
         "π*D": round(periph_D, 2),
     }
 
-    # Add heights h1..hn
+    # Heights h1..hn
     for i, h in enumerate(h_values, start=1):
         calc[f"h{i}"] = h
-
-    # Add hole profile h′ and l′
+    # Hole profile h′, l′
     for i, h2 in enumerate(h_prime, start=1):
         calc[f"h'{i}"] = h2
     for i, l2 in enumerate(l_prime, start=1):
         calc[f"l'{i}"] = l2
 
-    return {"calc": calc}
+    result = {"calc": calc}
+
+    # -------------------------------------
+    # Encode DXF if standalone
+    # -------------------------------------
+    if local_mode:
+        buf = io.StringIO()
+        doc.write(buf)
+        dxf_text = buf.getvalue()
+        buf.close()
+        dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 20. Tee Eccentric (α = 90°, offset X)
 def generate_tee_eccentric(params, msp=None, layer="CUT"):
