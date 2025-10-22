@@ -668,47 +668,37 @@ def generate_rectangle_to_circle(D, H, A, B, n, msp=None, layer="CUT"):
     return result
 
 # 11. Rectangle to Circle Eccentric
-def generate_rectangle_to_circle_ecc(params, msp=None, layer="0"):
+def generate_rectangle_to_circle_ecc(params, msp=None, layer="CUT"):
     """
-    Rectangle -> Cercle excentré (développement)
+    Rectangle → Cercle excentré (développement)
+    Compatible avec pipeline DXF unifié.
     Entrée params:
       {
-        "D": float,    # Ø cercle supérieur
-        "H": float,    # hauteur verticale
-        "A": float,    # dimension verticale du rectangle (axe Y)
-        "B": float,    # dimension horizontale du rectangle (axe X)
-        "X": float,    # excentration du cercle selon X (vers +B)
-        "Y": float,    # excentration du cercle selon Y (vers +A)
-        "n": int       # nb de génératrices dans l’arc
+        "D": float, "H": float,
+        "A": float, "B": float,
+        "X": float, "Y": float,
+        "n": int
       }
     Retour:
       {
-        "entities": [...],   # (si msp est None on renvoie les segments pour intégration)
-        "calc": {
-          "l":  ..., "h1": ..., "ah": ..., "dh": ...,
-          "a1": ..., "a2": ..., "b1": ..., "b2": ...,
-          "c1": ..., "c2": ..., "d1": ..., "d2": ...
-        }
+        "entities": [...],
+        "calc": {...}
       }
-
-    Géométrie:
-      - Repère plan (0,0) au centre du rectangle bas.
-      - Coins: a(-B/2,+A/2), b(-B/2,-A/2), c(+B/2,-A/2), d(+B/2,+A/2)
-      - Centre cercle: C = (X, Y), rayon R = D/2.
-      - Ventail central entre les directions (b -> C) et (c -> C), discrétisé en n.
     """
+    import math
 
+    # --- Données d'entrée ---
     D = float(params["D"])
     H = float(params["H"])
     A = float(params["A"])
     B = float(params["B"])
     X = float(params["X"])
     Y = float(params["Y"])
-    n = max(3, int(params.get("n", 12)))  # sécurité
+    n = max(3, int(params.get("n", 12)))
 
     R = D / 2.0
 
-    # Coins du rectangle en bas (vue en plan)
+    # Coins du rectangle (vue en plan)
     a = (-B/2.0,  A/2.0)
     b = (-B/2.0, -A/2.0)
     c = ( B/2.0, -A/2.0)
@@ -716,82 +706,55 @@ def generate_rectangle_to_circle_ecc(params, msp=None, layer="0"):
 
     Cx, Cy = X, Y
 
-    # Aides
     def dist2d(P, Q):
         return math.hypot(P[0]-Q[0], P[1]-Q[1])
 
-    # Longueur d'arc élémentaire l (arc de cercle réel, pas la corde)
+    # Longueur d’arc élémentaire
     perim = math.tau * R
     l = perim / n
 
-    # Offsets utiles (distance du centre du cercle aux bords du rectangle le long des axes)
-    # ah: marge verticale du centre vers le bord haut/bas (on renvoie la plus petite distance)
+    # Offsets utiles
     ah = min(abs(Cy - (+A/2.0)), abs(Cy - (-A/2.0)))
     dh = min(abs(Cx - (+B/2.0)), abs(Cx - (-B/2.0)))
 
-    # Direction angulaire depuis C vers b et vers c pour borner l'arc "central"
+    # Directions angulaires
     ang_b = math.atan2(b[1]-Cy, b[0]-Cx)
     ang_c = math.atan2(c[1]-Cy, c[0]-Cx)
 
-    # Normaliser l'intervalle d'angle dans le sens trigonométrique court
     def wrap(a): 
         while a <= -math.pi: a += 2*math.pi
         while a >  math.pi: a -= 2*math.pi
         return a
 
     da = wrap(ang_c - ang_b)
-    if da <= 0:                  # assure un balayage positif
+    if da <= 0:
         da += 2*math.pi
     dtheta = da / n
 
-    # Points de l'arc supérieur (sur le cercle) – limites incluses
-    arc_pts = []
-    for i in range(n+1):
-        th = ang_b + i*dtheta
-        arc_pts.append((Cx + R*math.cos(th), Cy + R*math.sin(th)))
+    # Points de l'arc supérieur
+    arc_pts = [(Cx + R*math.cos(ang_b + i*dtheta),
+                Cy + R*math.sin(ang_b + i*dtheta)) for i in range(n+1)]
 
-    # ---- VRAIES LONGUEURS des génératrices limites pour chaque coin ----
-    # Principe: pour chaque coin, on prend les deux points de cercle voisins
-    # qui bornent les éventails: 
-    #  - coin b : arc_pts[0] et arc_pts[1]
-    #  - coin c : arc_pts[-2] et arc_pts[-1]
-    #  - coin a : on projette sur l'extrémité gauche du groupe (arc_pts[0]) et le milieu
-    #  - coin d : idem côté droit (milieu et arc_pts[-1])
-    # Cela reproduit les valeurs a1..d2 visibles dans ton exemple (deux longueurs par coin).
-
+    # --- Vraies longueurs des génératrices ---
     def true_length(P, Q_on_circle):
-        rP = dist2d(P, (Cx, Cy))         # distance horizontale coin -> centre
-        # on corrige pour viser le bord du cercle (au point Q_on_circle)
-        # r_edge = distance horizontale du coin à ce point du cercle
-        r_edge = dist2d(P, Q_on_circle)
-        # composante horizontale le long de la génératrice ≈ (r_edge - 0) ; 
-        # mais pour la cohérence avec la formule coin-centre:
-        #   rP - R est un bon estimateur pour vraie longueur.
-        # On prend la vraie longueur exacte via r_edge: 
-        return math.hypot(H, r_edge)     # P -> point du cercle (vraie 3D: H en Z)
+        return math.hypot(H, dist2d(P, Q_on_circle))
 
-    # coins
     aP, bP, cP, dP = a, b, c, d
-
-    # paires de points de cercle pour chaque coin
-    aQ1, aQ2 = arc_pts[0], arc_pts[n//2]          # gauche et milieu
+    aQ1, aQ2 = arc_pts[0], arc_pts[n//2]
     bQ1, bQ2 = arc_pts[0], arc_pts[1]
     cQ1, cQ2 = arc_pts[-2], arc_pts[-1]
-    dQ1, dQ2 = arc_pts[n//2], arc_pts[-1]         # milieu et droite
+    dQ1, dQ2 = arc_pts[n//2], arc_pts[-1]
 
     a1 = true_length(aP, aQ1); a2 = true_length(aP, aQ2)
     b1 = true_length(bP, bQ1); b2 = true_length(bP, bQ2)
     c1 = true_length(cP, cQ1); c2 = true_length(cP, cQ2)
     d1 = true_length(dP, dQ1); d2 = true_length(dP, dQ2)
 
-    # Longueur "h1" = génératrice médiane (depuis milieu de BC) jusqu'au milieu d'arc
     mid_base = ((b[0]+c[0])/2.0, (b[1]+c[1])/2.0)
     mid_arc  = arc_pts[n//2]
     h1 = true_length(mid_base, mid_arc)
 
-    # ----------------- DESSIN DXF (développement) -----------------
-    # On place BC comme segment horizontal de base et on déplie l’arc par cordes.
-    # Layout simple, lisible et symétrique (comme ta référence).
+    # --- Dessin du développé ---
     entities = []
     def add_line(p, q):
         if msp is not None:
@@ -799,69 +762,45 @@ def generate_rectangle_to_circle_ecc(params, msp=None, layer="0"):
         else:
             entities.append(("LINE", p, q))
 
-    # Échelle de dessin: on travaille en unités "mm" 1:1
     # Base BC
     Bv = (0.0, 0.0)
     Cv = (B,  0.0)
     add_line(Bv, Cv)
 
-    # Nœud central (milieu de BC) — base du ventail
     O = ((Bv[0]+Cv[0])/2.0, 0.0)
 
-    # On construit l’arc concave “développé” au-dessus de BC :
-    # la corde i relie deux points "haut" espacés de l (on projette par un polyligne de cordes).
-    # Pour fixer l’allure, on place le point haut i à une distance verticale égale à la vraie longueur
-    # moins H (ceci donne un galbe concave proche de ta capture).
-    # Vecteur radial depuis O pour chaque génératrice vers le haut:
-    # positions horizontales des génératrices le long de la base:
     step = B / n
     gens_bottom = [(O[0] - (n/2.0 - i)*step, 0.0) for i in range(n+1)]
-
-    # Pour chaque génératrice du bas, calculer la vraie longueur correspondante
-    # en l'associant au point de cercle arc_pts[i] :
     gens_top = []
     for i in range(n+1):
         Pbot = gens_bottom[i]
         Qtop = arc_pts[i]
-        L = true_length(Pbot, Qtop)     # vraie longueur géométrique
-        # placer le point haut à une altitude "L" (développement à plat: on le projette
-        # le long d'une direction fictive verticale pour obtenir une courbe concave)
+        L = true_length(Pbot, Qtop)
         gens_top.append((Pbot[0], L))
 
-    # Relier les points hauts par cordes (arc concave)
+    # Arc concave
     for i in range(n):
         add_line(gens_top[i], gens_top[i+1])
 
-    # Tracer les génératrices (ventail)
+    # Génératrices
     for i in range(n+1):
         add_line(gens_bottom[i], gens_top[i])
 
-    # Panneaux latéraux gauche (coin b) et droit (coin c)
-    # On ferme avec les longueurs b1/b2 et c1/c2 via triangles.
-    # Gauche: depuis Bv jusqu'au point haut proche (gens_top[0]) puis vers un sommet extérieur
-    # construit à partir de la vraie longueur b1.
+    # Panneaux latéraux gauche/droite
     def radial_point(base_pt, length, angle_deg):
         ang = math.radians(angle_deg)
         return (base_pt[0] + length*math.cos(ang), base_pt[1] + length*math.sin(ang))
 
-    left_peak  = radial_point(Bv, b1, 110)   # un peu incliné comme sur ta ref
+    left_peak  = radial_point(Bv, b1, 110)
     right_peak = radial_point(Cv, c2, 70)
+    add_line(Bv, left_peak); add_line(left_peak, gens_top[0])
+    add_line(Cv, right_peak); add_line(right_peak, gens_top[-1])
 
-    add_line(Bv, left_peak)
-    add_line(left_peak, gens_top[0])
-
-    add_line(Cv, right_peak)
-    add_line(right_peak, gens_top[-1])
-
-    # Panneaux intermédiaires vers les coins a et d (deux triangles centraux)
-    apex_L = gens_top[1]
-    apex_R = gens_top[-2]
-    add_line(Bv, apex_L)
-    add_line(Cv, apex_R)
-
-    # Lignes intérieures “génératrices” vers le nœud central comme sur la capture
+    apex_L = gens_top[1]; apex_R = gens_top[-2]
+    add_line(Bv, apex_L); add_line(Cv, apex_R)
     add_line(O, gens_top[n//2])
 
+    # --- Données calculées ---
     calc = {
         "l": round(l, 2),
         "h1": round(h1, 2),
@@ -1028,11 +967,26 @@ def generate_frustum_ecc_paral(params, msp=None, layer="0"):
     return {"calc": calc, "entities": entities}
 
 # 14. Offset Cone
-def generate_offset_cone(D, H, X, n):
+def generate_offset_cone(D, H, X, n, msp=None, layer="CUT"):
     """
-    Generate DXF flat pattern for an Offset Cone (Cône excentré)
+    Generate DXF flat pattern for an Offset Cone (Cône excentré).
+    Compatible with unified DXF pipeline.
+    Inputs:
+        D : diameter base
+        H : height
+        X : offset
+        n : number of divisions
+        msp: DXF modelspace (optional)
+        layer: DXF layer name
+    Returns:
+        {
+          "data": {...},  # geometric data
+          "dxf_base64": ...  # only if msp=None (standalone mode)
+        }
     """
+    import math, ezdxf, io, base64
 
+    # --- Base geometry ---
     R = D / 2
     a = 180 / n  # degree step
 
@@ -1043,40 +997,48 @@ def generate_offset_cone(D, H, X, n):
         Li = math.sqrt(H**2 + (R + X * math.cos(theta))**2)
         L_values.append(Li)
 
-    # --- Create DXF ---
-    doc = ezdxf.new(setup=True)
-    msp = doc.modelspace()
+    # --- DXF setup ---
+    if msp is None:
+        doc = ezdxf.new(setup=True)
+        msp = doc.modelspace()
+        local_mode = True
+    else:
+        doc = None
+        local_mode = False
 
+    # --- Geometry plotting ---
     apex = (0, 0)
     angle_step = math.radians(a)
     angle_accum = 0
-
-    # Points along curve
     points = []
+
     for Li in L_values:
         x = Li * math.cos(angle_accum)
         y = Li * math.sin(angle_accum)
         points.append((x, y))
         angle_accum += angle_step
 
-    # Draw pattern
-    msp.add_lwpolyline([apex] + points, close=False)
-    msp.add_lwpolyline(points, close=True)
+    # Draw edges
+    msp.add_lwpolyline([apex] + points, close=False, dxfattribs={"layer": layer})
+    msp.add_lwpolyline(points, close=True, dxfattribs={"layer": layer})
 
-    # --- Encode DXF (use StringIO for text) ---
-    text_buffer = io.StringIO()
-    doc.write(text_buffer)
-    dxf_text = text_buffer.getvalue()
-    text_buffer.close()
-
-    dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
-
-    # --- Prepare output data ---
+    # --- Output data ---
     data = {"a": round(a, 2)}
     for i, L in enumerate(L_values):
         data[f"L{i}"] = round(L, 2)
 
-    return {"dxf_base64": dxf_base64, "data": data}
+    result = {"data": data}
+
+    # --- Encode DXF only if used standalone ---
+    if local_mode:
+        text_buffer = io.StringIO()
+        doc.write(text_buffer)
+        dxf_text = text_buffer.getvalue()
+        text_buffer.close()
+        dxf_base64 = base64.b64encode(dxf_text.encode("utf-8")).decode("utf-8")
+        result["dxf_base64"] = dxf_base64
+
+    return result
 
 # 15. Sphere
 def generate_sphere(D, N, n):

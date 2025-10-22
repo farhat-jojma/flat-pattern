@@ -177,9 +177,11 @@ def generate_dxf():
                 float(params["D"]),
                 float(params["H"]),
                 float(params["X"]),
-                int(params["n"])
+                int(params["n"]),
+                msp=msp,        # ✅ crucial
+                layer="CUT"
             )
-            response_data = out.get("calc", out.get("data", out))
+            response_data = out.get("data")
 
         elif shape == "sphere":
             out = generate_sphere(
