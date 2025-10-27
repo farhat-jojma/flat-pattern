@@ -83,12 +83,39 @@ def generate_dxf():
             response_data = res.get("data", {})
 
         elif shape == "frustum_cone":
-            d1 = float(params.get("D1") or params.get("diameter1"))
-            d2 = float(params.get("D2") or params.get("diameter2"))
+            d1_raw = params.get("D1") or params.get("diameter1")
+            d2_raw = params.get("D2") or params.get("diameter2")
 
-            # Determine calculation mode
+            if d1_raw is None or d2_raw is None:
+                return jsonify({
+                    "error": "Missing required diameter(s) for frustum_cone",
+                    "required": ["D1", "D2"],
+                    "aliases": {"D1": ["diameter1"], "D2": ["diameter2"]}
+                }), 400
+
+            d1 = float(d1_raw)
+            d2 = float(d2_raw)
+
+            # Determine calculation mode and fetch value with aliases
             mode = params.get("mode", "H").upper()
-            value = float(params.get("H") if mode == "H" else params.get("beta"))
+            if mode == "H":
+                value_raw = params.get("H") or params.get("height")
+                param_name = "H"
+                aliases = ["height"]
+            else:
+                value_raw = params.get("beta") or params.get("angle")
+                param_name = "beta"
+                aliases = ["angle"]
+
+            if value_raw is None:
+                return jsonify({
+                    "error": f"Missing required parameter '{param_name}' for mode '{mode}' in frustum_cone",
+                    "required": [param_name],
+                    "aliases": {param_name: aliases},
+                    "hint": "Provide 'mode' as 'H' with H/height, or as 'BETA' with beta/angle"
+                }), 400
+
+            value = float(value_raw)
 
             res = generate_frustum_cone(d1, d2, value, mode)
             msp.add_lwpolyline(res["points"], close=True)

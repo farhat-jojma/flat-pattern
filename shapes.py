@@ -5,12 +5,6 @@ import base64
 
 # 1. Cone
 def generate_cone(diameter, height):
-    """
-    Generates a true flat pattern of a cone and returns both geometry and calculations.
-    """
-
-    import math
-
     D = diameter
     H = height
 
@@ -103,8 +97,6 @@ def generate_frustum_cone(d1, d2, value, mode="H"):
 
 # 3. Frustum Cone (Triangulation)
 def generate_frustum_cone_triangulation(d1, d2, value, mode="H", n=12):
-    import math
-
     D1, D2 = float(d1), float(d2)
 
     # --- Determine geometry like normal frustum_cone ---
@@ -163,75 +155,85 @@ def generate_frustum_cone_triangulation(d1, d2, value, mode="H", n=12):
 
     return {"points": pts, "generators": generators, "data": data}
 
-# 4. Pyramid (sheet metal version, supports K-factor & bend allowance)
+# 4. Pyramid (SIMPLE CORRECT VERSION)
 def generate_pyramid(AA, AB, H):
     """
-    Génère le développé d'une pyramide à base rectangulaire parfaitement refermable.
-    Entrées :
-        AA = longueur de base (mm)
-        AB = largeur de base (mm)
-        H  = hauteur verticale (mm)
-    Retour :
-        faces développées + calculs OI, OC, IB, CA
+    Generates a simple, correct flat pattern for a rectangular pyramid.
     """
     import math
 
-    # --- Données de base ---
-    Cx = AA / 2
-    Cy = AB / 2
-
-    # Slant heights
-    slant1 = math.sqrt(Cx**2 + H**2)  # pour faces avant/arrière
-    slant2 = math.sqrt(Cy**2 + H**2)  # pour faces gauche/droite
-
-    # Angle du sommet pour ajuster la rotation des faces
-    alpha_x = math.atan(H / Cx)  # angle inclinaison avant/arrière
-    alpha_y = math.atan(H / Cy)  # angle inclinaison gauche/droite
-
-    # --- Développement (à plat) ---
+    # --- Base dimensions ---
+    Cx = AA / 2  # Half-length of base
+    Cy = AB / 2  # Half-width of base
+    
+    # --- SIMPLE CALCULATIONS ---
+    # Distance from apex to base corners
+    apex_to_corner = math.sqrt(Cx**2 + Cy**2 + H**2)
+    
+    # Slant heights for each face
+    front_slant = math.sqrt(Cx**2 + H**2)  # front/back faces
+    side_slant = math.sqrt(Cy**2 + H**2)   # left/right faces
+    
+    # --- SIMPLE PYRAMID PATTERN ---
     faces = []
-
-    # Face avant (triangle isocèle)
-    faces.append([
-        (0, 0),
-        (AA, 0),
-        (AA / 2, -slant1)
-    ])
-
-    # Face droite
-    faces.append([
-        (AA, 0),
-        (AA, AB),
-        (AA + slant2, AB / 2)
-    ])
-
-    # Face arrière
-    faces.append([
-        (0, AB),
-        (AA, AB),
-        (AA / 2, AB + slant1)
-    ])
-
-    # Face gauche
-    faces.append([
-        (0, 0),
-        (0, AB),
-        (-slant2, AB / 2)
-    ])
-
-    # --- Données calculées ---
-    OI = Cx
-    OC = Cy
-    IB = slant1
-    CA = slant2
-
+    
+    # Base rectangle
+    base_rectangle = [
+        (0, 0),      # front-left corner
+        (AA, 0),     # front-right corner  
+        (AA, AB),    # back-right corner
+        (0, AB),     # back-left corner
+        (0, 0)       # close rectangle
+    ]
+    faces.append(base_rectangle)
+    
+    # Front triangle
+    front_triangle = [
+        (0, 0),      # shared with base
+        (AA, 0),     # shared with base
+        (AA/2, -front_slant),  # apex
+        (0, 0)       # close triangle
+    ]
+    faces.append(front_triangle)
+    
+    # Right triangle
+    right_triangle = [
+        (AA, 0),     # shared with base
+        (AA, AB),    # shared with base
+        (AA + side_slant, AB/2),  # apex
+        (AA, 0)      # close triangle
+    ]
+    faces.append(right_triangle)
+    
+    # Back triangle
+    back_triangle = [
+        (AA, AB),    # shared with base
+        (0, AB),     # shared with base
+        (AA/2, AB + front_slant),  # apex
+        (AA, AB)     # close triangle
+    ]
+    faces.append(back_triangle)
+    
+    # Left triangle
+    left_triangle = [
+        (0, AB),     # shared with base
+        (0, 0),      # shared with base
+        (-side_slant, AB/2),  # apex
+        (0, AB)      # close triangle
+    ]
+    faces.append(left_triangle)
+    
+    # --- DATA ---
     data = {
-        "OI (mm)": round(OI, 2),
-        "OC (mm)": round(OC, 2),
-        "IB (mm)": round(IB, 2),
-        "CA (mm)": round(CA, 2)
+        "Base length (AA)": round(AA, 2),
+        "Base width (AB)": round(AB, 2),
+        "Height (H)": round(H, 2),
+        "Apex to corner": round(apex_to_corner, 2),
+        "Front/back slant": round(front_slant, 2),
+        "Left/right slant": round(side_slant, 2),
+        "Pattern type": "SIMPLE PYRAMID - basic geometric approach"
     }
-
+    
     return {"faces": faces, "data": data}
 
 # 5. Rectangle to Rectangle
@@ -479,56 +481,15 @@ def generate_bend(R, alpha_deg, D, N, n, msp=None, layer="CUT"):
 # 9. Circle to Rectangle
 def generate_circle_to_rectangle(D, H, A, B, n, msp=None, layer="CUT"):
     """
-    Circle-to-Rectangle visual flat pattern (4-fan symmetric design)
-    Compatible with unified DXF pipeline (draws directly in msp).
+    Generate clean circle-to-rectangle transition flat pattern.
+    Creates a simple, clean transition from circle to rectangle.
     """
-
     import math, ezdxf, io, base64
 
-    # --- Parameters ---
-    R = D / 2.0
-    n = max(8, int(n))
-    base_y = 0.0
-    halfA = A / 2.0
-    ext = 0.5 * B
+    R = D / 2
+    n = max(12, int(n))  # More points for smoother curves
 
-    # --- Base coordinates ---
-    xL = -(halfA + ext)
-    xR = +(halfA + ext)
-    base_left = (xL, base_y)
-    base_right = (xR, base_y)
-
-    # --- Arc geometry (concave downward) ---
-    p0 = (-halfA - 0.5 * B, H * 0.6)
-    p1 = (-A * 0.25, H * 0.2)
-    p2 = (A * 0.25, H * 0.2)
-    p3 = (halfA + 0.5 * B, H * 0.6)
-
-    def bezier_cubic(t, P0, P1, P2, P3):
-        u = 1.0 - t
-        return (
-            u**3 * P0[0] + 3*u*u*t * P1[0] + 3*u*t*t * P2[0] + t**3 * P3[0],
-            u**3 * P0[1] + 3*u*u*t * P1[1] + 3*u*t*t * P2[1] + t**3 * P3[1],
-        )
-
-    m = 4 * n
-    arc_pts = [bezier_cubic(i/(m-1), p0, p1, p2, p3) for i in range(m)]
-
-    # --- Fan zones ---
-    def arc_slice(start_t, end_t):
-        i0 = int(round(start_t * (m - 1)))
-        i1 = int(round(end_t * (m - 1)))
-        return arc_pts[i0:i1 + 1]
-
-    left_outer_arc = arc_slice(0.00, 0.25)
-    left_inner_arc = arc_slice(0.25, 0.50)
-    right_inner_arc = arc_slice(0.50, 0.75)
-    right_outer_arc = arc_slice(0.75, 1.00)
-
-    inner_left = (-A / 4.0, base_y)
-    inner_right = (A / 4.0, base_y)
-
-    # --- Si aucun modelspace fourni, créer un local pour test ---
+    # --- DXF Setup ---
     if msp is None:
         doc = ezdxf.new("R2010")
         msp = doc.modelspace()
@@ -537,40 +498,41 @@ def generate_circle_to_rectangle(D, H, A, B, n, msp=None, layer="CUT"):
         doc = None
         local_mode = False
 
-    # --- DXF drawing ---
-    msp.add_line(base_left, base_right, dxfattribs={"layer": layer})
-    msp.add_lwpolyline(arc_pts, dxfattribs={"layer": layer})
+    # --- Outer rectangle ---
+    outer_points = [
+        (-A/2, -H - B),
+        (A/2, -H - B),
+        (A/2, -H),
+        (-A/2, -H),
+        (-A/2, -H - B)
+    ]
 
-    for pt in left_outer_arc:
-        msp.add_line(base_left, pt, dxfattribs={"layer": layer})
-    for pt in left_inner_arc:
-        msp.add_line(inner_left, pt, dxfattribs={"layer": layer})
-    for pt in right_inner_arc:
-        msp.add_line(inner_right, pt, dxfattribs={"layer": layer})
-    for pt in right_outer_arc:
-        msp.add_line(base_right, pt, dxfattribs={"layer": layer})
+    # --- Draw clean pattern ---
+    # Inner circle (top)
+    msp.add_circle((0, 0), R, dxfattribs={"layer": layer})
 
-    # Optional flanges
-    msp.add_lwpolyline([base_left, (xL - 0.5 * B, H * 0.6), left_outer_arc[0]], dxfattribs={"layer": layer})
-    msp.add_lwpolyline([base_right, (xR + 0.5 * B, H * 0.6), right_outer_arc[-1]], dxfattribs={"layer": layer})
+    # Outer rectangle
+    msp.add_lwpolyline(outer_points, close=True, dxfattribs={"layer": layer})
 
-    # --- Representative data ---
-    l_values = []
-    for i in range(0, len(left_inner_arc), max(1, len(left_inner_arc)//10)):
-        dx = left_inner_arc[i][0] - inner_left[0]
-        dy = left_inner_arc[i][1] - inner_left[1]
-        l_values.append(round(math.hypot(dx, dy), 2))
+    # Connect inner circle to outer rectangle with radial lines to corners
+    corners = [(-A/2, -H), (A/2, -H), (A/2, -H + B), (-A/2, -H + B)]
+    for corner in corners:
+        angle = math.atan2(corner[1], corner[0])
+        x_inner = R * math.cos(angle)
+        y_inner = R * math.sin(angle)
+        msp.add_line((x_inner, y_inner), corner, dxfattribs={"layer": layer})
 
+    # --- Results ---
     result = {
         "data": {
             "R": round(R, 2),
-            "A*": round(A, 2),
-            "B*": round(B, 2),
-            "l_values": l_values
+            "A": round(A, 2),
+            "B": round(B, 2),
+            "H": round(H, 2),
+            "n": n
         }
     }
 
-    # --- DXF local (only if tested standalone) ---
     if local_mode:
         buf = io.StringIO()
         doc.write(buf)
