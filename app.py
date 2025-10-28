@@ -118,7 +118,29 @@ def generate_dxf():
             value = float(value_raw)
 
             res = generate_frustum_cone(d1, d2, value, mode)
-            msp.add_lwpolyline(res["points"], close=True)
+            # Draw arcs (circular sector pattern) using polylines for better rendering
+            for arc in res["arcs"]:
+                # Generate points along the arc for smooth rendering
+                center = arc["center"]
+                radius = arc["radius"]
+                start_angle = arc["start_angle"]
+                end_angle = arc["end_angle"]
+                
+                # Create 100 points along the arc for smooth curve
+                arc_points = []
+                num_points = 100
+                for i in range(num_points + 1):
+                    angle = start_angle + (end_angle - start_angle) * i / num_points
+                    angle_rad = math.radians(angle)
+                    x = center[0] + radius * math.cos(angle_rad)
+                    y = center[1] + radius * math.sin(angle_rad)
+                    arc_points.append((x, y))
+                
+                msp.add_lwpolyline(arc_points, close=False)
+            
+            # Draw radial lines
+            for line in res["lines"]:
+                msp.add_line(line[0], line[1])
             response_data = res.get("data", {})
 
         elif shape == "frustum_cone_triangulation":

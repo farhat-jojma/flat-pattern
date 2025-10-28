@@ -55,25 +55,28 @@ def generate_frustum_cone(d1, d2, value, mode="H"):
         H = math.sqrt(diff)
         R1, R2 = R_outer, R_inner
 
-    # --- Arcs inclinés ---
-    steps = 200
-    outer, inner = [], []
+    # --- Arc parameters for proper circular sector ---
     start_angle = -beta / 2
-    for i in range(steps + 1):
-        θ = math.radians(start_angle + i * (beta / steps))
-        outer.append((R1 * math.cos(θ), R1 * math.sin(θ)))
-        inner.append((R2 * math.cos(θ), R2 * math.sin(θ)))
-    inner.reverse()
-    pts = outer + inner + [outer[0]]
+    end_angle = beta / 2
+    
+    # Calculate end points for radial lines
+    start_angle_rad = math.radians(start_angle)
+    end_angle_rad = math.radians(end_angle)
+    
+    # Points for the two radial lines
+    p1_outer = (R1 * math.cos(start_angle_rad), R1 * math.sin(start_angle_rad))
+    p1_inner = (R2 * math.cos(start_angle_rad), R2 * math.sin(start_angle_rad))
+    p2_outer = (R1 * math.cos(end_angle_rad), R1 * math.sin(end_angle_rad))
+    p2_inner = (R2 * math.cos(end_angle_rad), R2 * math.sin(end_angle_rad))
 
     # --- Calculs complémentaires ---
     corde_A = 2 * R1 * math.sin(math.radians(beta / 2))
     corde_C = 2 * R2 * math.sin(math.radians(beta / 2))
-    L = R2 - R1
+    L = R1 - R2
     pi_D1 = math.pi * D1
     pi_D2 = math.pi * D2
 
-    # hauteur projetée de chaque rayon sur l’axe du cône
+    # hauteur projetée de chaque rayon sur l'axe du cône
     h1 = R1 * math.cos(math.radians(beta / 2))
     h2 = R2 * math.cos(math.radians(beta / 2))
     B = h2 - h1
@@ -93,7 +96,18 @@ def generate_frustum_cone(d1, d2, value, mode="H"):
         "Corde C": round(corde_C, 2),
     }
 
-    return {"points": pts, "data": data}
+    # Return arc parameters instead of points
+    return {
+        "arcs": [
+            {"center": (0, 0), "radius": R1, "start_angle": start_angle, "end_angle": end_angle},
+            {"center": (0, 0), "radius": R2, "start_angle": start_angle, "end_angle": end_angle}
+        ],
+        "lines": [
+            (p1_outer, p1_inner),
+            (p2_outer, p2_inner)
+        ],
+        "data": data
+    }
 
 # 3. Frustum Cone (Triangulation)
 def generate_frustum_cone_triangulation(d1, d2, value, mode="H", n=12):
@@ -511,19 +525,47 @@ def generate_circle_to_rectangle(D, H, A, B, n, msp=None, layer="CUT"):
         local_mode = True
 
     # --- Build single symmetrical outline ---
-    # Bottom edge (circular arc)
-    bottom_pts = [(X[i], 0.0) for i in range(n + 1)]
-    # Top edge (from true lengths)
-    top_pts = [(X[i], L[i]) for i in range(n + 1)]
+    # Bottom edge: use a curved base (scaled circular arc) to match
+    # the target "demi-circle" look, and place the top edge above it
+    # by the true length at each station.
+    base_curvature_scale = 0.35  # 0..1, controls how pronounced the base arc is
+    base_y = [base_curvature_scale * R * (1.0 - math.cos(angles[i])) for i in range(n + 1)]
+    bottom_pts = [(X[i], base_y[i]) for i in range(n + 1)]
+    top_pts = [(X[i], base_y[i] + L[i]) for i in range(n + 1)]
 
     # Full outline: left side + top + right side + bottom
     outline = [bottom_pts[0]] + top_pts + [bottom_pts[-1]] + bottom_pts[::-1]
     msp.add_lwpolyline(outline, close=True, dxfattribs={"layer": layer})
 
-    # --- Draw radiating generators (evenly spaced) ---
-    step = max(1, n // 60)  # ~60 generators for dense appearance
-    for i in range(0, n + 1, step):
-        msp.add_line((X[i], 0.0), (X[i], L[i]), dxfattribs={"layer": layer})
+    # --- Draw alternating fan generators across 4 segments ---
+    # We split the strip into 4 equal segments. In each segment, lines
+    # radiate from the segment boundary on one side (alternating left/right)
+    # to the top curve points within that segment. This reproduces the
+    # alternating triangular fan look in the reference image.
+    segments = 4
+    boundaries = [round(i * n / segments) for i in range(segments + 1)]
+
+    for s in range(segments):
+        i_start = boundaries[s]
+        i_end = boundaries[s + 1]
+        # Use the segment midpoint on the bottom as the apex so that
+        # each segment has a distinct convergence point.
+        apex_index = (i_start + i_end) // 2
+        apex_point = (X[apex_index], base_y[apex_index])
+
+        # Choose a local density so each fan has ~20–30 rays
+        local_count = max(20, (i_end - i_start))
+        local_step = max(1, (i_end - i_start) // 25)
+
+        # Connect apex to top-curve points across the segment, alternating
+        # sweep direction to enhance the mirrored look.
+        if s % 2 == 0:
+            idx_range = range(i_start, i_end + 1, local_step)
+        else:
+            idx_range = range(i_end, i_start - 1, -local_step)
+
+        for i in idx_range:
+            msp.add_line(apex_point, (X[i], base_y[i] + L[i]), dxfattribs={"layer": layer})
 
     result = {
         "data": {
@@ -844,10 +886,51 @@ def generate_frustum_ecc_angle(params, msp=None, layer="0"):
         pts_top.append((x1, y1))
         pts_bot.append((x2, y2))
 
-    # Connect arcs and generators
-    for i in range(n - 1):
-        add_line(pts_top[i], pts_top[i + 1])
-        add_line(pts_bot[i], pts_bot[i + 1])
+    # Create proper eccentric frustum development with varying generator lengths
+    # Use the actual calculated generator lengths for the development
+    
+    # Generate smooth arcs using the varying generator lengths
+    smooth_top = []
+    smooth_bot = []
+    num_smooth = 200
+    
+    for i in range(num_smooth + 1):
+        # Interpolate between generator positions
+        t = i / num_smooth
+        idx_float = t * (n - 1)
+        idx_low = int(idx_float)
+        idx_high = min(idx_low + 1, n - 1)
+        frac = idx_float - idx_low
+        
+        # Interpolate generator length (this creates the eccentric effect)
+        L_interp = L[idx_low] + frac * (L[idx_high] - L[idx_low]) if idx_high < len(L) else L[idx_low]
+        
+        # Calculate angle in development
+        ang = t * math.radians(b_angle)
+        
+        # Use interpolated lengths for proper eccentric development
+        r_bot = L_interp
+        r_top = L_interp - (R2 - R1)
+        
+        x_bot = r_bot * math.cos(ang)
+        y_bot = r_bot * math.sin(ang)
+        x_top = r_top * math.cos(ang)
+        y_top = r_top * math.sin(ang)
+        
+        smooth_top.append((x_top, y_top))
+        smooth_bot.append((x_bot, y_bot))
+
+    # Draw smooth arcs using the varying radii (creates eccentric shape)
+    if msp is not None:
+        msp.add_lwpolyline(smooth_top, close=False, dxfattribs={"layer": layer})
+        msp.add_lwpolyline(smooth_bot, close=False, dxfattribs={"layer": layer})
+    
+    # Draw side closing lines (left and right edges)
+    add_line(smooth_top[0], smooth_bot[0])   # Left edge
+    add_line(smooth_top[-1], smooth_bot[-1])  # Right edge
+    
+    # Draw generator lines
+    for i in range(n):
         add_line(pts_top[i], pts_bot[i])
 
     calc = {"a": a, "b": b}
@@ -905,25 +988,42 @@ def generate_frustum_ecc_paral(params, msp=None, layer="0"):
         else:
             entities.append(("LINE", p, q))
 
-    # Divide the sector
-    step = math.radians(b_angle) / (n - 1)
-    pts_top = []
-    pts_bot = []
+    # Center the development so the middle rib is vertical (fan-like look)
+    beta_rad = math.radians(b_angle)
 
-    for i in range(n):
-        ang = i * step
-        r_top = L[i] - (R2 - R1)
-        r_bot = L[i]
-        x1, y1 = r_top * math.cos(ang), r_top * math.sin(ang)
-        x2, y2 = r_bot * math.cos(ang), r_bot * math.sin(ang)
-        pts_top.append((x1, y1))
-        pts_bot.append((x2, y2))
+    # Smooth inner/outer arcs with constant radii for fan-like appearance
+    num_smooth = 360
+    smooth_bot = []
+    smooth_top = []
+    for i in range(num_smooth + 1):
+        t = i / num_smooth
+        ang = -beta_rad / 2 + t * beta_rad
+        # Constant radii: bottom arc at R1, top arc at R2
+        r_bot = R1
+        r_top = R2
+        smooth_bot.append((r_bot * math.cos(ang), r_bot * math.sin(ang)))
+        smooth_top.append((r_top * math.cos(ang), r_top * math.sin(ang)))
 
-    # Connect arcs + generators
-    for i in range(n - 1):
-        add_line(pts_top[i], pts_top[i + 1])
-        add_line(pts_bot[i], pts_bot[i + 1])
-        add_line(pts_top[i], pts_bot[i])
+    if msp is not None:
+        msp.add_lwpolyline(smooth_top, close=False, dxfattribs={"layer": layer})
+        msp.add_lwpolyline(smooth_bot, close=False, dxfattribs={"layer": layer})
+
+    # Radiating ribs (evenly spaced angles across the sector)
+    ribs = int(params.get("ribs", max(2 * n - 1, n)))
+    ribs = max(ribs, 3)
+    for i in range(ribs):
+        t = i / (ribs - 1)
+        ang = -beta_rad / 2 + t * beta_rad
+        # Constant radii for ribs
+        r_bot = R1
+        r_top = R2
+        p_top = (r_top * math.cos(ang), r_top * math.sin(ang))
+        p_bot = (r_bot * math.cos(ang), r_bot * math.sin(ang))
+        add_line(p_top, p_bot)
+
+    # Side edges for closure
+    add_line(smooth_top[0], smooth_bot[0])
+    add_line(smooth_top[-1], smooth_bot[-1])
 
     # ---- results ----
     calc = {"a": a, "b": b}
