@@ -163,77 +163,51 @@ def generate_pyramid(AA, AB, H):
     import math
 
     # --- Base dimensions ---
-    Cx = AA / 2  # Half-length of base
-    Cy = AB / 2  # Half-width of base
-    
-    # --- SIMPLE CALCULATIONS ---
-    # Distance from apex to base corners
-    apex_to_corner = math.sqrt(Cx**2 + Cy**2 + H**2)
-    
-    # Slant heights for each face
-    front_slant = math.sqrt(Cx**2 + H**2)  # front/back faces
-    side_slant = math.sqrt(Cy**2 + H**2)   # left/right faces
-    
-    # --- SIMPLE PYRAMID PATTERN ---
+    Cx = AA / 2
+    Cy = AB / 2
+
+    # True edge (apex to any base corner) — constant radius for all faces
+    R = math.sqrt(Cx**2 + Cy**2 + H**2)
+
+    # Side bases with seam (AB centered): AB, AA, AB, AA, AB
+    # The last AB duplicates the first to provide a closing seam in the development
+    bases = [AB, AA, AB, AA, AB]
+
+    # Central angles for each base as chords on circle radius R
+    def safe_alpha(L, r):
+        x = max(min(L / (2 * r), 1.0), -1.0)
+        return 2 * math.asin(x)
+
+    alphas = [safe_alpha(L, R) for L in bases]
+
+    # Build apex-centered vertices on circle radius R (center first AB triangle)
+    theta = -alphas[0] / 2.0
+    pts = [(R * math.cos(theta), R * math.sin(theta))]
+    for a in alphas:
+        theta += a
+        pts.append((R * math.cos(theta), R * math.sin(theta)))
+
+    # Create triangular faces around the single apex (0,0)
     faces = []
-    
-    # Base rectangle
-    base_rectangle = [
-        (0, 0),      # front-left corner
-        (AA, 0),     # front-right corner  
-        (AA, AB),    # back-right corner
-        (0, AB),     # back-left corner
-        (0, 0)       # close rectangle
-    ]
-    faces.append(base_rectangle)
-    
-    # Front triangle
-    front_triangle = [
-        (0, 0),      # shared with base
-        (AA, 0),     # shared with base
-        (AA/2, -front_slant),  # apex
-        (0, 0)       # close triangle
-    ]
-    faces.append(front_triangle)
-    
-    # Right triangle
-    right_triangle = [
-        (AA, 0),     # shared with base
-        (AA, AB),    # shared with base
-        (AA + side_slant, AB/2),  # apex
-        (AA, 0)      # close triangle
-    ]
-    faces.append(right_triangle)
-    
-    # Back triangle
-    back_triangle = [
-        (AA, AB),    # shared with base
-        (0, AB),     # shared with base
-        (AA/2, AB + front_slant),  # apex
-        (AA, AB)     # close triangle
-    ]
-    faces.append(back_triangle)
-    
-    # Left triangle
-    left_triangle = [
-        (0, AB),     # shared with base
-        (0, 0),      # shared with base
-        (-side_slant, AB/2),  # apex
-        (0, AB)      # close triangle
-    ]
-    faces.append(left_triangle)
-    
-    # --- DATA ---
+    apex = (0.0, 0.0)
+    for i in range(len(bases)):
+        tri = [apex, pts[i], pts[i + 1]]
+        faces.append(tri)
+
+    # Computed data
     data = {
         "Base length (AA)": round(AA, 2),
         "Base width (AB)": round(AB, 2),
         "Height (H)": round(H, 2),
-        "Apex to corner": round(apex_to_corner, 2),
-        "Front/back slant": round(front_slant, 2),
-        "Left/right slant": round(side_slant, 2),
-        "Pattern type": "SIMPLE PYRAMID - basic geometric approach"
+        "Apex to corner (R)": round(R, 2),
+        "alpha1 (deg)": round(math.degrees(alphas[0]), 2),
+        "alpha2 (deg)": round(math.degrees(alphas[1]), 2),
+        "alpha3 (deg)": round(math.degrees(alphas[2]), 2),
+        "alpha4 (deg)": round(math.degrees(alphas[3]), 2),
+        "alpha5 (deg)": round(math.degrees(alphas[4]), 2),
+        "Pattern type": "PYRAMID FAN (apex-centered)"
     }
-    
+
     return {"faces": faces, "data": data}
 
 # 5. Rectangle to Rectangle
@@ -481,55 +455,85 @@ def generate_bend(R, alpha_deg, D, N, n, msp=None, layer="CUT"):
 # 9. Circle to Rectangle
 def generate_circle_to_rectangle(D, H, A, B, n, msp=None, layer="CUT"):
     """
-    Generate clean circle-to-rectangle transition flat pattern.
-    Creates a simple, clean transition from circle to rectangle.
+    Circle → Rectangle transition flat pattern (symmetrical development).
+    Bottom: circular arc (unrolled), Top: small rectangle (centered)
     """
     import math, ezdxf, io, base64
 
-    R = D / 2
-    n = max(12, int(n))  # More points for smoother curves
+    # --- Geometry ---
+    R = D / 2.0
+    n = max(60, int(n))  # Sampling density
 
-    # --- DXF Setup ---
+    # Rectangle perimeter and circle circumference
+    rect_perim = 2 * (A + B)
+    circ_perim = 2 * math.pi * R
+
+    # Development angle: how much of the circle to unroll
+    # For symmetry, unroll an arc that's proportional to rect vs circle size
+    theta_dev = 2 * math.pi * (rect_perim / circ_perim)
+    theta_dev = min(theta_dev, 2 * math.pi * 0.9)  # Cap at 90% of full circle
+
+    # Sample points along circle arc (centered, symmetric)
+    angles = [theta_dev * (i / n - 0.5) for i in range(n + 1)]
+    circ_pts_plan = [(R * math.cos(a), R * math.sin(a)) for a in angles]
+
+    # Sample points along rectangle perimeter (walk all 4 sides)
+    def rect_point_at_t(t):
+        # t ∈ [0,1] parameterizes rectangle perimeter
+        s = t * rect_perim
+        if s < B:  # bottom edge
+            return (-B/2 + s, -A/2)
+        s -= B
+        if s < A:  # right edge
+            return (B/2, -A/2 + s)
+        s -= A
+        if s < B:  # top edge
+            return (B/2 - s, A/2)
+        s -= B
+        # left edge
+        return (-B/2, A/2 - s)
+
+    rect_pts_plan = [rect_point_at_t(i / n) for i in range(n + 1)]
+
+    # True lengths: distance from circle to rectangle in 3D
+    def dist(p, q):
+        return math.hypot(p[0] - q[0], p[1] - q[1])
+    L = [math.sqrt(H**2 + dist(circ_pts_plan[i], rect_pts_plan[i])**2) for i in range(n + 1)]
+
+    # Development X: arc length along unrolled circle
+    X = [R * angles[i] for i in range(n + 1)]
+
+    # --- DXF setup ---
+    local_mode = False
     if msp is None:
-        doc = ezdxf.new("R2010")
+        doc = ezdxf.new(setup=True)
         msp = doc.modelspace()
         local_mode = True
-    else:
-        doc = None
-        local_mode = False
 
-    # --- Outer rectangle ---
-    outer_points = [
-        (-A/2, -H - B),
-        (A/2, -H - B),
-        (A/2, -H),
-        (-A/2, -H),
-        (-A/2, -H - B)
-    ]
+    # --- Build single symmetrical outline ---
+    # Bottom edge (circular arc)
+    bottom_pts = [(X[i], 0.0) for i in range(n + 1)]
+    # Top edge (from true lengths)
+    top_pts = [(X[i], L[i]) for i in range(n + 1)]
 
-    # --- Draw clean pattern ---
-    # Inner circle (top)
-    msp.add_circle((0, 0), R, dxfattribs={"layer": layer})
+    # Full outline: left side + top + right side + bottom
+    outline = [bottom_pts[0]] + top_pts + [bottom_pts[-1]] + bottom_pts[::-1]
+    msp.add_lwpolyline(outline, close=True, dxfattribs={"layer": layer})
 
-    # Outer rectangle
-    msp.add_lwpolyline(outer_points, close=True, dxfattribs={"layer": layer})
+    # --- Draw radiating generators (evenly spaced) ---
+    step = max(1, n // 60)  # ~60 generators for dense appearance
+    for i in range(0, n + 1, step):
+        msp.add_line((X[i], 0.0), (X[i], L[i]), dxfattribs={"layer": layer})
 
-    # Connect inner circle to outer rectangle with radial lines to corners
-    corners = [(-A/2, -H), (A/2, -H), (A/2, -H + B), (-A/2, -H + B)]
-    for corner in corners:
-        angle = math.atan2(corner[1], corner[0])
-        x_inner = R * math.cos(angle)
-        y_inner = R * math.sin(angle)
-        msp.add_line((x_inner, y_inner), corner, dxfattribs={"layer": layer})
-
-    # --- Results ---
     result = {
         "data": {
             "R": round(R, 2),
             "A": round(A, 2),
             "B": round(B, 2),
             "H": round(H, 2),
-            "n": n
+            "n": n,
+            "Development_angle_deg": round(math.degrees(theta_dev), 2),
+            "Width": round(X[-1] - X[0], 2)
         }
     }
 
@@ -1564,18 +1568,31 @@ def generate_tee_on_bend(params, msp=None, layer="CUT"):
     l = periph_d / n
 
     # --- Compute height values along intersection ---
-    pts = []
+    # The pattern should have:
+    # - Bottom curve representing the intersection with the bend
+    # - Top straight edge at height H
+    # - Vertical generator lines
+    
+    top_pts = []
+    bottom_pts = []
     h_values = []
 
     for i in range(n + 1):
         theta = 2 * math.pi * i / n
-        # Height combining bend curvature and branch offset
-        h = H + Rc * (1 - math.cos(theta / 2)) + r * math.sin(theta)
-        h_values.append(round(h, 2))
-        pts.append((i * l, h))
-
-    # Close pattern
-    pts_closed = [(0, 0)] + pts + [(periph_d, 0)]
+        x = i * l
+        
+        # Bottom curve: intersection with the curved pipe
+        # The curve should bulge downward (inverted U-shape)
+        # At the edges (theta=0, 2π): higher values
+        # At the center (theta=π): lower values
+        h_bottom = r * math.cos(theta)
+        
+        # Top edge: constant height
+        h_top = H
+        
+        h_values.append(round(h_bottom, 2))
+        bottom_pts.append((x, h_bottom))
+        top_pts.append((x, h_top))
 
     # --- DXF setup ---
     local_mode = False
@@ -1585,14 +1602,17 @@ def generate_tee_on_bend(params, msp=None, layer="CUT"):
         local_mode = True
 
     # --- DXF drawing ---
-    # Top curve
-    msp.add_lwpolyline(pts_closed, close=True, dxfattribs={"layer": layer})
-    # Base line
-    msp.add_line((0, 0), (periph_d, 0), dxfattribs={"layer": layer, "color": 3})
+    # Top line (straight)
+    msp.add_line((0, H), (periph_d, H), dxfattribs={"layer": layer})
+    # Bottom curve (intersection with bend)
+    msp.add_spline(bottom_pts, dxfattribs={"layer": layer})
+    # Side lines
+    msp.add_line((0, bottom_pts[0][1]), (0, H), dxfattribs={"layer": layer})
+    msp.add_line((periph_d, bottom_pts[-1][1]), (periph_d, H), dxfattribs={"layer": layer})
     # Vertical generator lines
     for i in range(n + 1):
         x = i * l
-        msp.add_line((x, 0), (x, pts[i][1]), dxfattribs={"layer": layer, "color": 5})
+        msp.add_line((x, bottom_pts[i][1]), (x, H), dxfattribs={"layer": layer, "color": 5})
 
     # --- Calculation results ---
     calc = {"π*d": round(periph_d, 2), "l": round(l, 2)}
