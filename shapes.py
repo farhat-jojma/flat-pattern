@@ -590,83 +590,96 @@ def generate_circle_to_rectangle(D, H, A, B, n, msp=None, layer="CUT"):
 # 10. Rectangle to Circle
 def generate_rectangle_to_circle(D, H, A, B, n, msp=None, layer="CUT"):
     """
-    Generate DXF flat pattern for Rectangle → Circle transition.
-    Compatible with unified DXF pipeline (draws directly in msp).
+    Flat pattern for Rectangle → Circle transition matching the alternating
+    fan layout (as in the reference second image). We treat the large
+    rectangle as the base and the circle as the top. The developed strip has
+    a slightly curved base and a smooth upper curve, with alternating fan
+    generators converging to midpoints along the base.
     """
     import math, ezdxf, io, base64
 
-    # --- Geometry ---
-    R = D / 2
-    n = max(6, int(n))
-    A_star = A
-    B_star = B
-    R_dev = math.sqrt((A / 2) ** 2 + (B / 2) ** 2 + H ** 2)
-    c = (math.pi * R) / n
+    # --- Geometry (plan and true lengths) ---
+    R = D / 2.0
+    n = max(60, int(n))
 
-    # --- Slant lengths for data ---
-    l_values = []
-    for i in range(1, n + 1):
-        theta = math.pi * (i - 1) / (n - 1)
-        dx = (A / 2) - (R * math.cos(theta))
-        dy = (B / 2) - (R * math.sin(theta))
-        l = math.sqrt(dx**2 + dy**2 + H**2)
-        l_values.append(l)
+    # Walk the rectangle perimeter uniformly
+    rect_perim = 2 * (A + B)
 
-    # --- DXF handling ---
+    def rect_point_at_t(t):
+        s = t * rect_perim
+        if s < B:
+            return (-B/2 + s, -A/2)
+        s -= B
+        if s < A:
+            return (B/2, -A/2 + s)
+        s -= A
+        if s < B:
+            return (B/2 - s, A/2)
+        s -= B
+        return (-B/2, A/2 - s)
+
+    rect_pts_plan = [rect_point_at_t(i / n) for i in range(n + 1)]
+
+    # Sample the circle uniformly by angle for the top
+    angles = [2 * math.pi * (i / n) for i in range(n + 1)]
+    circ_pts_plan = [(R * math.cos(a), R * math.sin(a)) for a in angles]
+
+    def dist(p, q):
+        return math.hypot(p[0] - q[0], p[1] - q[1])
+
+    # True lengths between corresponding plan stations
+    L = [math.sqrt(H**2 + dist(rect_pts_plan[i], circ_pts_plan[i])**2) for i in range(n + 1)]
+
+    # Development X using circle arc length (unrolled)
+    X = [R * angles[i] for i in range(n + 1)]
+
+    # --- DXF setup ---
+    local_mode = False
     if msp is None:
         doc = ezdxf.new(setup=True)
         msp = doc.modelspace()
         local_mode = True
-    else:
-        doc = None
-        local_mode = False
 
-    # --- Outer pattern (rectangle projected edge) ---
-    angle_step = 2 * math.pi / (2 * n)
-    points = []
-    for i in range(n + 1):
-        angle = i * angle_step
-        x = R_dev * math.sin(angle)
-        y = R_dev * math.cos(angle)
-        points.append((x, y))
+    # Slight base curvature so the top looks like a shallow arc
+    base_curvature_scale = 0.35
+    base_y = [base_curvature_scale * R * (1.0 - math.cos(angles[i])) for i in range(n + 1)]
+    bottom_pts = [(X[i], base_y[i]) for i in range(n + 1)]
+    top_pts = [(X[i], base_y[i] + L[i]) for i in range(n + 1)]
 
-    # ✅ Top circle (true circular edge)
-    msp.add_circle((0, 0), R, dxfattribs={"layer": layer})
+    outline = [bottom_pts[0]] + top_pts + [bottom_pts[-1]] + bottom_pts[::-1]
+    msp.add_lwpolyline(outline, close=True, dxfattribs={"layer": layer})
 
-    # Connect outer to circle perimeter using radial lines
-    for i in range(n + 1):
-        angle = i * angle_step
-        x_outer = R_dev * math.sin(angle)
-        y_outer = R_dev * math.cos(angle)
-        x_inner = R * math.sin(angle)
-        y_inner = R * math.cos(angle)
+    # --- Alternating fan generators across 4 segments (mirrored) ---
+    segments = 4
+    boundaries = [round(i * n / segments) for i in range(segments + 1)]
 
-        # Outer edge line (next segment)
-        if i < n:
-            x_next = R_dev * math.sin(angle + angle_step)
-            y_next = R_dev * math.cos(angle + angle_step)
-            msp.add_line((x_outer, y_outer), (x_next, y_next), dxfattribs={"layer": layer})
+    for s in range(segments):
+        i_start = boundaries[s]
+        i_end = boundaries[s + 1]
+        apex_index = (i_start + i_end) // 2
+        apex_point = (X[apex_index], base_y[apex_index])
 
-        # Radial connection
-        msp.add_line((x_outer, y_outer), (x_inner, y_inner), dxfattribs={"layer": layer})
+        local_step = max(1, (i_end - i_start) // 25)
+        if s % 2 == 0:
+            idx_range = range(i_start, i_end + 1, local_step)
+        else:
+            idx_range = range(i_end, i_start - 1, -local_step)
 
-    # Close first connection
-    msp.add_line(points[0], (R * math.sin(0), R * math.cos(0)), dxfattribs={"layer": layer})
+        for i in idx_range:
+            msp.add_line(apex_point, (X[i], base_y[i] + L[i]), dxfattribs={"layer": layer})
 
-    # --- Output data ---
-    data = {
-        "c": round(c, 2),
-        "R_dev": round(R_dev, 2),
-        "R_top": round(R, 2),
-        "A*": round(A_star, 2),
-        "B*": round(B_star, 2),
+    # --- Output data for UI/debug ---
+    result = {
+        "data": {
+            "R": round(R, 2),
+            "A": round(A, 2),
+            "B": round(B, 2),
+            "H": round(H, 2),
+            "n": n,
+            "Width": round(X[-1] - X[0], 2)
+        }
     }
-    for i, l in enumerate(l_values, 1):
-        data[f"l{i}"] = round(l, 2)
 
-    result = {"data": data}
-
-    # --- If local test mode, also return encoded DXF ---
     if local_mode:
         buf = io.StringIO()
         doc.write(buf)
